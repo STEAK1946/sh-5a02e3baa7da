@@ -72,15 +72,19 @@ input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12p
 .task input[type=checkbox]{width:28px;height:28px;min-height:0;flex:none;accent-color:var(--red)}
 .task .t{flex:1}
 .task.done .t .tt{text-decoration:line-through;color:var(--muted)}
+.banner.err{background:#fde8e8;border-color:#dc2626;font-weight:600}
+.badge.live{background:#15803d;border-color:#86efac}
+.badge.off{background:#7f1d1d;border-color:#fca5a5}
 </style>
 </head>
 <body>
 <header>
   <div><h1>Store Hub</h1><div class="sub">Inventory · Chat · Tasks</div></div>
-  <div class="right"><span class="badge" id="modeBadge">Local mode</span><button class="staffbtn" id="staffBtn">Staff: —</button></div>
+  <div class="right"><span class="badge" id="modeBadge">Connecting…</span><button class="staffbtn" id="staffBtn">Staff: —</button></div>
 </header>
 
 <main>
+<div id="connBanner" class="banner err hidden" role="status"></div>
 <section id="tab-inventory">
   <div id="lowBanner" class="banner hidden"></div>
   <div id="countNote" class="note hidden"></div>
@@ -103,7 +107,7 @@ input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12p
 
 <section id="tab-chat" class="hidden">
   <div class="toolbar"><h2>Team Chat</h2></div>
-  <p class="note">Messages are saved on this device only.</p>
+  <p class="note" id="chatNote">Messages are shared with everyone using Store Hub.</p>
   <div id="chatList"></div>
   <div style="height:70px"></div>
 </section>
@@ -130,15 +134,15 @@ input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12p
 <div class="modal-bg hidden" id="itemModal"><form class="modal" id="itemForm" autocomplete="off">
   <h3 id="itemModalTitle">Add Item</h3>
   <label for="fBarcode">Barcode (type or use a scanner keyboard)</label>
-  <input id="fBarcode" inputmode="numeric" placeholder="Optional">
+  <input id="fBarcode" inputmode="numeric" placeholder="Optional" maxlength="64">
   <label for="fName">Item name</label>
-  <input id="fName" required placeholder="e.g. 16&quot; pizza boxes">
+  <input id="fName" required maxlength="200" placeholder="e.g. 16&quot; pizza boxes">
   <div class="row2">
     <div><label for="fQty">Qty on hand</label><input id="fQty" type="number" inputmode="decimal" min="0" step="any" placeholder="Not counted"></div>
     <div><label for="fThr">Low-stock at</label><input id="fThr" type="number" inputmode="decimal" min="0" step="any" placeholder="Not set"></div>
   </div>
   <label for="fUnit">Unit</label>
-  <input id="fUnit" placeholder="e.g. cases, lbs, jugs" required>
+  <input id="fUnit" placeholder="e.g. cases, lbs, jugs" required maxlength="50">
   <label for="fSup">Preferred supplier</label>
   <select id="fSup"><option>Restaurant Depot</option><option>Sam's Club</option></select>
   <div class="modal-actions"><button type="button" class="btn" data-close="itemModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
@@ -148,9 +152,9 @@ input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12p
 <div class="modal-bg hidden" id="taskModal"><form class="modal" id="taskForm" autocomplete="off">
   <h3>Add Task</h3>
   <label for="tTitle">Task</label>
-  <input id="tTitle" required placeholder="e.g. Clean fryer #2">
+  <input id="tTitle" required maxlength="200" placeholder="e.g. Clean fryer #2">
   <label for="tNotes">Notes (optional)</label>
-  <input id="tNotes">
+  <input id="tNotes" maxlength="500">
   <div class="modal-actions"><button type="button" class="btn" data-close="taskModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
 </form></div>
 
@@ -169,179 +173,437 @@ input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12p
   <div class="modal-actions"><button type="button" class="btn" id="confirmCancel">Cancel</button><button type="button" class="btn danger" id="confirmOk">Delete</button></div>
 </div></div>
 
-<script>
-(function(){
+<script type="module">
 'use strict';
-var KEY='storehub.v2';
-var SUPPLIERS=["Restaurant Depot","Sam's Club"];
-function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
-function now(){return new Date().toISOString();}
+/* ===== Store Hub (Firestore edition) =====
+   Shared data lives in Cloud Firestore (collections: items, requests, chat, tasks, meta).
+   If Firebase cannot load, sign-in fails, or the database refuses access, the app falls back to
+   "Offline/Local mode" (data on this phone only, not shared) and says so clearly. */
+const FB_VER = '10.14.1';
+const FB_BASE = 'https://www.gstatic.com/firebasejs/' + FB_VER + '/';
+/* Public Firebase web config (not a secret; access is controlled by Firestore security rules). */
+const firebaseConfig = {
+  apiKey: "AIzaSyACgWq4bcAlnpRigJ23K2xOY9N7rAdq_eI",
+  authDomain: "store-hub-ricobenes.firebaseapp.com",
+  projectId: "store-hub-ricobenes",
+  storageBucket: "store-hub-ricobenes.firebasestorage.app",
+  messagingSenderId: "888953977035",
+  appId: "1:888953977035:web:b82335bca48628d75cc34e"
+};
+const LOCAL_KEY = 'storehub.local.v1';   /* fallback-only store; old 'storehub.v2' data is intentionally not migrated */
+const STAFF_KEY = 'storehub.staff';
+const CHAT_LIMIT = 100;
+const HISTORY_LIMIT = 50;
+const IS_LOCALHOST = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const USE_EMULATOR = IS_LOCALHOST && new URLSearchParams(location.search).get('emulator') === '1'; /* dev/test only */
+const SUPPLIERS = ["Restaurant Depot", "Sam's Club"];
 /* Real items from purchase history. On-hand qty and low-stock level are intentionally blank (not counted yet). */
-var SEED_ITEMS=[["Belmont Beef Flavor Base 25 lb Tub", "Restaurant Depot", "each", 2, "2026-03-10"], ["Belmont Chicken Soup Base 25 lb Tub", "Restaurant Depot", "each", 1, "2026-10-09"], ["Chef's Quality Hot Sauce gallon", "Restaurant Depot", "each", 20, "2026-10-09"], ["Chef's Quality Tonggol Chunk Light Tuna in Water 66.5 oz can", "Restaurant Depot", "each", 1, "2026-05-23"], ["Delta Star Parboiled Rice 25 lbs", "Restaurant Depot", "each", 1, "2026-08-03"], ["Domino Light Brown Sugar 7 lb", "Restaurant Depot", "each", 1, "2026-07-27"], ["Heinz Mustard Packets 500 ct", "Restaurant Depot", "pack", 1, "2026-05-05"], ["Hellmann's Real Mayonnaise Packets 210 ct", "Restaurant Depot", "pack", 1.5, "2026-10-09"], ["Roland Arborio Rice 11 lbs", "Restaurant Depot", "each", 2, "2026-10-09"], ["Sunset 2300 POS Carbonless Printer Rolls 2-ply 3\"x100' 10/tray", "Restaurant Depot", "pack", 3, "2026-10-09"], ["Winco Oven Mitt Flame Retardant 17\"", "Restaurant Depot", "each", 3, "2026-09-14"], ["Alliance 2-Ply Carbonless Receipt Rolls 3\"x100' White/Canary 50 rolls", "Sam's Club", "pack", 6, "2026-10-09"], ["BIC Round Stic Xtra Life Medium Black 96 ct", "Sam's Club", "pack", 1, "2026-04-09"], ["Folgers Classic Medium Roast Ground Coffee 43.5 oz", "Sam's Club", "each", 6, "2026-10-21"], ["Hefty Slider Storage Bags Gallon 136 ct", "Sam's Club", "pack", 4, "2026-10-02"], ["Lipton Onion Recipe Soup & Dip Mix 2 oz 6 pk", "Sam's Club", "pack", 12, "2026-10-21"], ["Member's Mark 33 Gal Commercial Can Liners 320 ct", "Sam's Club", "pack", 5, "2026-08-21"], ["Member's Mark 50 Gal Commercial Can Liners 220 ct", "Sam's Club", "pack", 5, "2026-10-21"], ["Member's Mark Ibuprofen 200 mg 1200 ct", "Sam's Club", "each", 1, "2026-04-09"], ["Post-it Super Sticky Notes Canary Yellow 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["Post-it Super Sticky Notes Miami Colors 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["T-Shirt Carry-Out Bags 11.5x6.5x22, 1,000 ct", "Sam's Club", "pack", 8, "2026-05-01"]];
-function seed(){
-  return SEED_ITEMS.map(function(r){return {id:uid(),name:r[0],supplier:r[1],unit:r[2],usualOrder:r[3],lastBought:r[4],qty:null,threshold:null,barcode:''};});
-}
-var state;
-function load(){
-  try{state=JSON.parse(localStorage.getItem(KEY));}catch(e){state=null;}
-  if(!state||typeof state!=='object')state={};
-  var needSeed=!Array.isArray(state.items); /* seed only when no inventory has ever been stored */
-  if(needSeed)state.items=seed();
-  ['requests','chat','tasks'].forEach(function(k){if(!Array.isArray(state[k]))state[k]=[];});
-  if(typeof state.staff!=='string')state.staff='';
-  if(needSeed)save();
-}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){alert('Could not save (storage full or private mode).');}}
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-function fmt(iso){if(!iso)return'';var d=new Date(iso);return d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
-function $(id){return document.getElementById(id);}
-function hasNum(v){return v!==null&&v!==undefined&&v!==''&&isFinite(Number(v));}
-function isLow(it){return hasNum(it.qty)&&hasNum(it.threshold)&&Number(it.qty)<=Number(it.threshold);}
-function numOrNull(s){s=String(s).trim();if(s==='')return null;var n=Number(s);return isFinite(n)&&n>=0?n:NaN;}
-function fmtDate(d){if(!d)return'';var p=d.split('-');if(p.length!==3)return d;return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString([], {month:'short',day:'numeric',year:'numeric'});}
-function openReqFor(itemId){return state.requests.find(function(r){return r.itemId===itemId&&r.status==='Requested';});}
+const SEED_ITEMS = [["Belmont Beef Flavor Base 25 lb Tub", "Restaurant Depot", "each", 2, "2026-03-10"], ["Belmont Chicken Soup Base 25 lb Tub", "Restaurant Depot", "each", 1, "2026-10-09"], ["Chef's Quality Hot Sauce gallon", "Restaurant Depot", "each", 20, "2026-10-09"], ["Chef's Quality Tonggol Chunk Light Tuna in Water 66.5 oz can", "Restaurant Depot", "each", 1, "2026-05-23"], ["Delta Star Parboiled Rice 25 lbs", "Restaurant Depot", "each", 1, "2026-08-03"], ["Domino Light Brown Sugar 7 lb", "Restaurant Depot", "each", 1, "2026-07-27"], ["Heinz Mustard Packets 500 ct", "Restaurant Depot", "pack", 1, "2026-05-05"], ["Hellmann's Real Mayonnaise Packets 210 ct", "Restaurant Depot", "pack", 1.5, "2026-10-09"], ["Roland Arborio Rice 11 lbs", "Restaurant Depot", "each", 2, "2026-10-09"], ["Sunset 2300 POS Carbonless Printer Rolls 2-ply 3\"x100' 10/tray", "Restaurant Depot", "pack", 3, "2026-10-09"], ["Winco Oven Mitt Flame Retardant 17\"", "Restaurant Depot", "each", 3, "2026-09-14"], ["Alliance 2-Ply Carbonless Receipt Rolls 3\"x100' White/Canary 50 rolls", "Sam's Club", "pack", 6, "2026-10-09"], ["BIC Round Stic Xtra Life Medium Black 96 ct", "Sam's Club", "pack", 1, "2026-04-09"], ["Folgers Classic Medium Roast Ground Coffee 43.5 oz", "Sam's Club", "each", 6, "2026-10-21"], ["Hefty Slider Storage Bags Gallon 136 ct", "Sam's Club", "pack", 4, "2026-10-02"], ["Lipton Onion Recipe Soup & Dip Mix 2 oz 6 pk", "Sam's Club", "pack", 12, "2026-10-21"], ["Member's Mark 33 Gal Commercial Can Liners 320 ct", "Sam's Club", "pack", 5, "2026-08-21"], ["Member's Mark 50 Gal Commercial Can Liners 220 ct", "Sam's Club", "pack", 5, "2026-10-21"], ["Member's Mark Ibuprofen 200 mg 1200 ct", "Sam's Club", "each", 1, "2026-04-09"], ["Post-it Super Sticky Notes Canary Yellow 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["Post-it Super Sticky Notes Miami Colors 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["T-Shirt Carry-Out Bags 11.5x6.5x22, 1,000 ct", "Sam's Club", "pack", 8, "2026-05-01"]];
+function seedId(i) { return 'seed-' + String(i + 1).padStart(2, '0'); }
 
-/* modals */
-function show(id){$(id).classList.remove('hidden');var f=$(id).querySelector('input');if(f)setTimeout(function(){f.focus();},50);}
-function hide(id){$(id).classList.add('hidden');}
-document.querySelectorAll('[data-close]').forEach(function(b){b.addEventListener('click',function(){hide(b.getAttribute('data-close'));pendingStaff=null;});});
-var confirmCb=null;
-function confirmDel(text,cb){$('confirmText').textContent=text;confirmCb=cb;show('confirmModal');}
-$('confirmCancel').onclick=function(){confirmCb=null;hide('confirmModal');};
-$('confirmOk').onclick=function(){var cb=confirmCb;confirmCb=null;hide('confirmModal');if(cb)cb();};
+/* ---------- shared state (normalized; timestamps are ms numbers or null) ---------- */
+const state = { items: [], requests: [], chat: [], tasks: [] };
+let mode = 'connecting';   /* 'connecting' | 'live' | 'local' */
+let ready = false;         /* first data has arrived */
+let staff = '';
+try { staff = localStorage.getItem(STAFF_KEY) || ''; } catch (e) { staff = ''; }
 
-/* staff */
-var pendingStaff=null;
-function withStaff(cb){if(state.staff){cb(state.staff);return;}pendingStaff=cb;$('sName').value='';show('staffModal');}
-$('staffBtn').onclick=function(){pendingStaff=null;$('sName').value=state.staff||'';show('staffModal');};
-$('staffForm').onsubmit=function(e){e.preventDefault();var n=$('sName').value.trim();if(!n)return;state.staff=n;save();hide('staffModal');renderStaff();var cb=pendingStaff;pendingStaff=null;if(cb)cb(n);render();};
-function renderStaff(){$('staffBtn').textContent='Staff: '+(state.staff||'set name');}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function toMs(v) { if (v == null) return null; if (typeof v.toMillis === 'function') return v.toMillis(); if (typeof v === 'number') return v; const t = Date.parse(v); return isNaN(t) ? null : t; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function fmt(ms) { if (ms == null) return ''; return new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+function $(id) { return document.getElementById(id); }
+function hasNum(v) { return v !== null && v !== undefined && v !== '' && isFinite(Number(v)); }
+function isLow(it) { return hasNum(it.qty) && hasNum(it.threshold) && Number(it.qty) <= Number(it.threshold); }
+function numOrNull(s) { s = String(s).trim(); if (s === '') return null; const n = Number(s); return isFinite(n) && n >= 0 ? n : NaN; }
+function fmtDate(d) { if (!d) return ''; const p = String(d).split('-'); if (p.length !== 3) return d; return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }); }
+function openReqFor(itemId) { return state.requests.find(r => r.itemId === itemId && r.status === 'open'); }
+class UserError extends Error { constructor(m) { super(m); this.userFacing = true; } }
+function withTimeout(p, ms, msg) { let t; return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(msg)), ms); })]).finally(() => clearTimeout(t)); }
+
+/* ---------- UI helpers ---------- */
+function show(id) { $(id).classList.remove('hidden'); const f = $(id).querySelector('input'); if (f) setTimeout(() => f.focus(), 50); }
+function hide(id) { $(id).classList.add('hidden'); }
+let toastEl = null;
+function toast(m) { if (!toastEl) { toastEl = document.createElement('div'); toastEl.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom));background:#111;color:#fff;padding:10px 16px;border-radius:16px;z-index:30;font-size:15px;transition:opacity .3s;max-width:92vw;text-align:center'; document.body.appendChild(toastEl); } toastEl.textContent = m; toastEl.style.opacity = 1; clearTimeout(toast._t); toast._t = setTimeout(() => { toastEl.style.opacity = 0; }, 2200); }
+function errText(e) {
+  if (e && e.userFacing) return e.message;
+  const code = e && e.code ? String(e.code) : '';
+  if (code.includes('permission-denied')) return 'The shared database refused this change (permission denied).';
+  if (code.includes('unavailable') || /offline/i.test(e && e.message || '')) return 'No connection to the shared database. Check Wi-Fi/data and try again.';
+  return 'Could not save: ' + ((e && (e.message || e.code)) || 'unknown error');
+}
+/* Run a write. The UI updates right away from the live listener; we only surface failures. */
+function run(p, okMsg) { return Promise.resolve(p).then(() => { if (okMsg) toast(okMsg); }, e => { console.error(e); alert(errText(e)); }); }
+
+function setBadge() {
+  const b = $('modeBadge');
+  b.classList.remove('live', 'off');
+  if (mode === 'local') { b.textContent = 'Offline/Local mode'; b.classList.add('off'); }
+  else if (mode === 'live') { if (liveOnline) { b.textContent = 'Live'; b.classList.add('live'); } else { b.textContent = 'Offline – reconnecting'; b.classList.add('off'); } }
+  else b.textContent = 'Connecting…';
+  $('chatNote').textContent = mode === 'local'
+    ? 'Local mode: messages are saved on this device only.'
+    : 'Messages are shared with everyone using Store Hub (latest ' + CHAT_LIMIT + ' shown).';
+}
+function showConn(msg) {
+  const el = $('connBanner');
+  if (!msg) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.innerHTML = '<div>' + esc(msg) + '</div><button class="btn small" id="retryBtn" style="margin-top:8px;width:100%">Try shared mode again</button>';
+  el.classList.remove('hidden');
+  $('retryBtn').onclick = () => location.reload();
+}
+
+/* =====================================================================
+   Backend 1: Firestore (shared, live)
+   ===================================================================== */
+let F = null, DB = null, unsubs = [], liveOnline = false, serverLoaded = false, seedTried = false;
+
+async function startFirestore() {
+  const mods = await withTimeout(Promise.all([
+    import(FB_BASE + 'firebase-app.js'),
+    import(FB_BASE + 'firebase-auth.js'),
+    import(FB_BASE + 'firebase-firestore.js')
+  ]).catch(e => { console.error(e); throw new Error('could not load Firebase (no internet?)'); }), 15000, 'could not load Firebase (no internet?)');
+  if (mode === 'local') return;
+  const [appM, authM, fsM] = mods;
+  const app = appM.initializeApp(firebaseConfig);
+  const auth = authM.getAuth(app);
+  const db = fsM.getFirestore(app); /* default = memory cache, i.e. offline persistence OFF */
+  if (USE_EMULATOR) { authM.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); fsM.connectFirestoreEmulator(db, '127.0.0.1', 8080); }
+  await withTimeout(authM.signInAnonymously(auth), 15000, 'sign-in timed out');
+  if (mode === 'local') return;
+  F = fsM; DB = db;
+  attachListeners();
+  setTimeout(() => { if (!serverLoaded) fallback('could not reach the shared database'); }, 20000);
+}
+
+function attachListeners() {
+  const { collection, query, orderBy, limit, where, onSnapshot } = F;
+  const opt = { serverTimestamps: 'estimate' };
+  const onErr = (what) => (err) => {
+    console.error('listener ' + what, err);
+    const code = String(err && err.code || '');
+    fallback(code.includes('permission-denied')
+      ? 'the shared database denied access (security rules not set up yet?)'
+      : 'shared database error (' + (code || err.message || 'unknown') + ')');
+  };
+  unsubs.push(onSnapshot(collection(DB, 'items'), { includeMetadataChanges: true }, snap => {
+    state.items = snap.docs.map(d => { const x = d.data(opt); return { id: d.id, name: x.name || '', supplier: x.supplier || '', unit: x.unit || '', usualOrder: x.usualOrder ?? null, lastBought: x.lastBought ?? null, qty: x.qty ?? null, threshold: x.threshold ?? null, barcode: x.barcode || '', openReq: x.openReq ?? null }; });
+    liveOnline = !snap.metadata.fromCache;
+    if (liveOnline) { serverLoaded = true; ready = true; if (mode !== 'local') { mode = 'live'; showConn(''); } }
+    if (liveOnline && snap.empty && !seedTried) seedOnce();
+    setBadge(); render();
+  }, onErr('items')));
+
+  let reqOpen = [], reqRecent = [];
+  const normReq = d => { const x = d.data(opt); return { id: d.id, itemId: x.itemId, itemName: x.itemName || '', supplier: x.supplier || '', requester: x.requester || '', requestedAt: toMs(x.requestedAt), status: x.status, orderedAt: toMs(x.orderedAt), orderedBy: x.orderedBy ?? null, cancelledAt: toMs(x.cancelledAt), cancelledBy: x.cancelledBy ?? null }; };
+  const mergeReqs = () => { const m = new Map(); reqRecent.concat(reqOpen).forEach(r => m.set(r.id, r)); state.requests = [...m.values()].sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0)); render(); };
+  /* All open requests (no index needed) + recent history (single-field index, automatic). */
+  unsubs.push(onSnapshot(query(collection(DB, 'requests'), where('status', '==', 'open')), snap => { reqOpen = snap.docs.map(normReq); mergeReqs(); }, onErr('requests-open')));
+  unsubs.push(onSnapshot(query(collection(DB, 'requests'), orderBy('requestedAt', 'desc'), limit(HISTORY_LIMIT)), snap => { reqRecent = snap.docs.map(normReq); mergeReqs(); }, onErr('requests-recent')));
+
+  unsubs.push(onSnapshot(query(collection(DB, 'chat'), orderBy('ts', 'desc'), limit(CHAT_LIMIT)), snap => {
+    const atBottom = (window.innerHeight + window.scrollY) >= document.body.scrollHeight - 80;
+    state.chat = snap.docs.map(d => { const x = d.data(opt); return { id: d.id, from: x.from || '', text: x.text || '', ts: toMs(x.ts) }; }).reverse();
+    render();
+    if (current === 'chat' && atBottom) window.scrollTo(0, document.body.scrollHeight);
+  }, onErr('chat')));
+
+  unsubs.push(onSnapshot(collection(DB, 'tasks'), snap => {
+    state.tasks = snap.docs.map(d => { const x = d.data(opt); return { id: d.id, title: x.title || '', notes: x.notes || '', done: !!x.done, createdBy: x.createdBy || '', createdAt: toMs(x.createdAt), doneAt: toMs(x.doneAt) }; })
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    render();
+  }, onErr('tasks')));
+}
+
+/* Seed the 22 starter items exactly once per database: a transaction on meta/seeded plus deterministic
+   item ids (seed-01..seed-22), so two phones opening the app at the same moment cannot duplicate them. */
+async function seedOnce(attempt) {
+  seedTried = true;
+  attempt = attempt || 1;
+  const { runTransaction, doc, serverTimestamp } = F;
+  try {
+    const did = await runTransaction(DB, async tx => {
+      const mref = doc(DB, 'meta', 'seeded');
+      const m = await tx.get(mref);
+      if (m.exists()) return false;
+      SEED_ITEMS.forEach((r, i) => tx.set(doc(DB, 'items', seedId(i)), {
+        name: r[0], supplier: r[1], unit: r[2], usualOrder: r[3], lastBought: r[4],
+        qty: null, threshold: null, barcode: '', openReq: null,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+      }));
+      tx.set(mref, { at: serverTimestamp(), count: SEED_ITEMS.length });
+      return true;
+    });
+    if (did) toast('Added ' + SEED_ITEMS.length + ' starter items');
+  } catch (e) {
+    /* Another phone may have seeded at the same moment (its write wins and ours is rejected).
+       Retry once: the retry sees meta/seeded and does nothing. */
+    if (attempt < 2) { setTimeout(() => seedOnce(attempt + 1), 1500); return; }
+    console.error('seed', e);
+    if (!state.items.length) toast('Could not add starter items: ' + errText(e));
+  }
+}
+
+const fsApi = {
+  addItem(d) {
+    const { addDoc, collection, serverTimestamp } = F;
+    return addDoc(collection(DB, 'items'), { name: d.name, supplier: d.supplier, unit: d.unit, usualOrder: null, lastBought: null, qty: d.qty, threshold: d.threshold, barcode: d.barcode, openReq: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  },
+  updateItem(id, d) {
+    const { writeBatch, doc, serverTimestamp } = F;
+    const b = writeBatch(DB);
+    b.update(doc(DB, 'items', id), { name: d.name, supplier: d.supplier, unit: d.unit, qty: d.qty, threshold: d.threshold, barcode: d.barcode, updatedAt: serverTimestamp() });
+    const r = openReqFor(id);
+    if (r) b.update(doc(DB, 'requests', r.id), { itemName: d.name, supplier: d.supplier });
+    return b.commit();
+  },
+  deleteItem(id) {
+    const { runTransaction, doc, serverTimestamp } = F;
+    const it = state.items.find(i => i.id === id);
+    const reqIds = new Set(state.requests.filter(r => r.itemId === id && r.status === 'open').map(r => r.id));
+    if (it && it.openReq) reqIds.add(it.openReq);
+    return runTransaction(DB, async tx => {
+      const snaps = [];
+      for (const rid of reqIds) snaps.push(await tx.get(doc(DB, 'requests', rid)));
+      snaps.forEach(s => { if (s.exists() && s.data().status === 'open') tx.update(s.ref, { status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: staff || '' }); });
+      tx.delete(doc(DB, 'items', id));
+    });
+  },
+  /* Duplicate block across phones: the item doc holds openReq (id of its open request); the transaction
+     re-checks it on the server, so two people tapping Request at once still yields one request. */
+  createRequest(item, name) {
+    const { runTransaction, doc, collection, serverTimestamp } = F;
+    return runTransaction(DB, async tx => {
+      const iref = doc(DB, 'items', item.id);
+      const is = await tx.get(iref);
+      if (!is.exists()) throw new UserError('That item was deleted.');
+      const cur = is.data();
+      if (cur.openReq) {
+        const rs = await tx.get(doc(DB, 'requests', cur.openReq));
+        if (rs.exists() && rs.data().status === 'open') throw new UserError('There is already an open request for ' + cur.name + '.');
+      }
+      const rref = doc(collection(DB, 'requests'));
+      tx.set(rref, { itemId: item.id, itemName: cur.name, supplier: cur.supplier, requester: name, requestedAt: serverTimestamp(), status: 'open', orderedAt: null, orderedBy: null, cancelledAt: null, cancelledBy: null });
+      tx.update(iref, { openReq: rref.id, updatedAt: serverTimestamp() });
+    });
+  },
+  closeRequest(r, name, status) {
+    const { runTransaction, doc, serverTimestamp } = F;
+    return runTransaction(DB, async tx => {
+      const rref = doc(DB, 'requests', r.id), iref = doc(DB, 'items', r.itemId);
+      const rs = await tx.get(rref);
+      const is = await tx.get(iref);
+      if (!rs.exists() || rs.data().status !== 'open') throw new UserError('That request is no longer open.');
+      tx.update(rref, status === 'ordered'
+        ? { status: 'ordered', orderedAt: serverTimestamp(), orderedBy: name }
+        : { status: 'cancelled', cancelledAt: serverTimestamp(), cancelledBy: name });
+      if (is.exists() && is.data().openReq === r.id) tx.update(iref, { openReq: null, updatedAt: serverTimestamp() });
+    });
+  },
+  sendChat(name, text) { const { addDoc, collection, serverTimestamp } = F; return addDoc(collection(DB, 'chat'), { from: name, text: text, ts: serverTimestamp() }); },
+  addTask(title, notes) { const { addDoc, collection, serverTimestamp } = F; return addDoc(collection(DB, 'tasks'), { title, notes, done: false, createdBy: staff || '', createdAt: serverTimestamp(), doneAt: null }); },
+  setTaskDone(id, done) { const { updateDoc, doc, serverTimestamp } = F; return updateDoc(doc(DB, 'tasks', id), { done, doneAt: done ? serverTimestamp() : null }); },
+  deleteTask(id) { const { deleteDoc, doc } = F; return deleteDoc(doc(DB, 'tasks', id)); }
+};
+
+/* =====================================================================
+   Backend 2: Local fallback (this phone only, NOT shared)
+   ===================================================================== */
+function localLoad() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(LOCAL_KEY)); } catch (e) { s = null; }
+  if (!s || typeof s !== 'object') s = {};
+  const needSeed = !Array.isArray(s.items);
+  if (needSeed) s.items = SEED_ITEMS.map((r, i) => ({ id: seedId(i), name: r[0], supplier: r[1], unit: r[2], usualOrder: r[3], lastBought: r[4], qty: null, threshold: null, barcode: '', openReq: null }));
+  ['requests', 'chat', 'tasks'].forEach(k => { if (!Array.isArray(s[k])) s[k] = []; });
+  state.items = s.items; state.requests = s.requests; state.chat = s.chat; state.tasks = s.tasks;
+  if (needSeed) localSave();
+}
+function localSave() { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)); } catch (e) { alert('Could not save (storage full or private mode).'); } }
+const localApi = {
+  async addItem(d) { state.items.unshift(Object.assign({ id: uid(), usualOrder: null, lastBought: null, openReq: null }, d)); localSave(); render(); },
+  async updateItem(id, d) { const it = state.items.find(i => i.id === id); if (!it) return; Object.assign(it, d); const r = openReqFor(id); if (r) { r.itemName = d.name; r.supplier = d.supplier; } localSave(); render(); },
+  async deleteItem(id) { state.items = state.items.filter(i => i.id !== id); state.requests.forEach(r => { if (r.itemId === id && r.status === 'open') { r.status = 'cancelled'; r.cancelledAt = Date.now(); r.cancelledBy = staff || ''; } }); localSave(); render(); },
+  async createRequest(item, name) { if (openReqFor(item.id)) throw new UserError('There is already an open request for ' + item.name + '.'); const r = { id: uid(), itemId: item.id, itemName: item.name, supplier: item.supplier, requester: name, requestedAt: Date.now(), status: 'open', orderedAt: null, orderedBy: null, cancelledAt: null, cancelledBy: null }; state.requests.unshift(r); item.openReq = r.id; localSave(); render(); },
+  async closeRequest(r0, name, status) { const r = state.requests.find(x => x.id === r0.id); if (!r || r.status !== 'open') throw new UserError('That request is no longer open.'); r.status = status; if (status === 'ordered') { r.orderedAt = Date.now(); r.orderedBy = name; } else { r.cancelledAt = Date.now(); r.cancelledBy = name; } const it = state.items.find(i => i.id === r.itemId); if (it && it.openReq === r.id) it.openReq = null; localSave(); render(); },
+  async sendChat(name, text) { state.chat.push({ id: uid(), from: name, text, ts: Date.now() }); if (state.chat.length > 500) state.chat = state.chat.slice(-500); localSave(); render(); },
+  async addTask(title, notes) { state.tasks.unshift({ id: uid(), title, notes, done: false, createdBy: staff || '', createdAt: Date.now(), doneAt: null }); localSave(); render(); },
+  async setTaskDone(id, done) { const t = state.tasks.find(x => x.id === id); if (!t) return; t.done = done; t.doneAt = done ? Date.now() : null; localSave(); render(); },
+  async deleteTask(id) { state.tasks = state.tasks.filter(x => x.id !== id); localSave(); render(); }
+};
+
+function api() { return mode === 'local' ? localApi : fsApi; }
+function canWrite() { if (mode === 'connecting' || !ready) { alert('Still connecting to the shared database. Try again in a moment.'); return false; } return true; }
+
+function fallback(reason) {
+  if (mode === 'local') return;
+  console.warn('Falling back to local mode:', reason);
+  unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = [];
+  mode = 'local'; ready = true;
+  localLoad();
+  showConn('Offline/Local mode: ' + reason + '. Changes are saved on this phone only and are NOT shared with other phones.');
+  setBadge(); render();
+}
+
+/* =====================================================================
+   UI (same screens and behavior as the local-only version)
+   ===================================================================== */
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { hide(b.getAttribute('data-close')); pendingStaff = null; }));
+let confirmCb = null;
+function confirmDel(text, cb, okLabel) { $('confirmText').textContent = text; $('confirmOk').textContent = okLabel || 'Delete'; confirmCb = cb; show('confirmModal'); }
+$('confirmCancel').onclick = () => { confirmCb = null; hide('confirmModal'); };
+$('confirmOk').onclick = () => { const cb = confirmCb; confirmCb = null; hide('confirmModal'); if (cb) cb(); };
+
+/* staff (stored on this phone only) */
+let pendingStaff = null;
+function withStaff(cb) { if (staff) { cb(staff); return; } pendingStaff = cb; $('sName').value = ''; show('staffModal'); }
+$('staffBtn').onclick = () => { pendingStaff = null; $('sName').value = staff || ''; show('staffModal'); };
+$('staffForm').onsubmit = e => { e.preventDefault(); const n = $('sName').value.trim().slice(0, 40); if (!n) return; staff = n; try { localStorage.setItem(STAFF_KEY, n); } catch (er) {} hide('staffModal'); renderStaff(); const cb = pendingStaff; pendingStaff = null; if (cb) cb(n); render(); };
+function renderStaff() { $('staffBtn').textContent = 'Staff: ' + (staff || 'set name'); }
 
 /* tabs */
-var current='inventory';
-document.querySelectorAll('nav button').forEach(function(b){b.addEventListener('click',function(){setTab(b.getAttribute('data-tab'));});});
-function setTab(t){current=t;
-  document.querySelectorAll('nav button').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-tab')===t);});
-  ['inventory','requests','chat','tasks'].forEach(function(x){$('tab-'+x).classList.toggle('hidden',x!==t);});
-  $('chatForm').classList.toggle('hidden',t!=='chat');
+let current = 'inventory';
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => setTab(b.getAttribute('data-tab'))));
+function setTab(t) {
+  current = t;
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === t));
+  ['inventory', 'requests', 'chat', 'tasks'].forEach(x => $('tab-' + x).classList.toggle('hidden', x !== t));
+  $('chatForm').classList.toggle('hidden', t !== 'chat');
   render();
-  if(t==='chat')window.scrollTo(0,document.body.scrollHeight);
+  if (t === 'chat') window.scrollTo(0, document.body.scrollHeight);
 }
 
 /* inventory */
-var editingId=null;
-function openItem(item,scan){
-  editingId=item?item.id:null;
-  $('itemModalTitle').textContent=item?'Edit Item':(scan?'Scan + Add Item':'Add Item');
-  $('fBarcode').value=item?item.barcode||'':'';
-  $('fName').value=item?item.name:'';
-  $('fQty').value=item&&hasNum(item.qty)?item.qty:'';
-  $('fThr').value=item&&hasNum(item.threshold)?item.threshold:'';
-  $('fUnit').value=item?item.unit:'';
-  $('fSup').value=item?item.supplier:SUPPLIERS[0];
+let editingId = null;
+function openItem(item, scan) {
+  editingId = item ? item.id : null;
+  $('itemModalTitle').textContent = item ? 'Edit Item' : (scan ? 'Scan + Add Item' : 'Add Item');
+  $('fBarcode').value = item ? item.barcode || '' : '';
+  $('fName').value = item ? item.name : '';
+  $('fQty').value = item && hasNum(item.qty) ? item.qty : '';
+  $('fThr').value = item && hasNum(item.threshold) ? item.threshold : '';
+  $('fUnit').value = item ? item.unit : '';
+  $('fSup').value = item ? item.supplier : SUPPLIERS[0];
   show('itemModal');
-  setTimeout(function(){(scan?$('fBarcode'):$('fName')).focus();},60);
+  setTimeout(() => (scan ? $('fBarcode') : $('fName')).focus(), 60);
 }
-$('addItemBtn').onclick=function(){openItem(null,false);};
-$('scanAddBtn').onclick=function(){openItem(null,true);};
-$('fBarcode').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();$('fName').focus();}});
-$('itemForm').onsubmit=function(e){e.preventDefault();
-  var d={name:$('fName').value.trim(),qty:numOrNull($('fQty').value),threshold:numOrNull($('fThr').value),unit:$('fUnit').value.trim(),supplier:$('fSup').value,barcode:$('fBarcode').value.trim()};
-  if(!d.name||Number.isNaN(d.qty)||Number.isNaN(d.threshold)){alert('Quantity and low-stock level must be 0 or more (or left blank).');return;}
-  if(editingId){var it=state.items.find(function(i){return i.id===editingId;});if(it){Object.assign(it,d);
-      var r=openReqFor(it.id);if(r){r.itemName=it.name;r.supplier=it.supplier;}}}
-  else{d.id=uid();state.items.unshift(d);}
-  save();hide('itemModal');render();
+$('addItemBtn').onclick = () => { if (canWrite()) openItem(null, false); };
+$('scanAddBtn').onclick = () => { if (canWrite()) openItem(null, true); };
+$('fBarcode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('fName').focus(); } });
+$('itemForm').onsubmit = e => {
+  e.preventDefault();
+  const d = { name: $('fName').value.trim(), qty: numOrNull($('fQty').value), threshold: numOrNull($('fThr').value), unit: $('fUnit').value.trim(), supplier: $('fSup').value || SUPPLIERS[0], barcode: $('fBarcode').value.trim() };
+  if (!d.name || Number.isNaN(d.qty) || Number.isNaN(d.threshold)) { alert('Quantity and low-stock level must be 0 or more (or left blank).'); return; }
+  const id = editingId;
+  hide('itemModal');
+  run(id ? api().updateItem(id, d) : api().addItem(d));
 };
-$('invSearch').addEventListener('input',render);
-function requestItem(it){
-  if(openReqFor(it.id)){alert('There is already an open request for '+it.name+'.');return;}
-  withStaff(function(name){
-    if(openReqFor(it.id))return;
-    state.requests.unshift({id:uid(),itemId:it.id,itemName:it.name,supplier:it.supplier,requester:name,requestedAt:now(),status:'Requested',orderedAt:null,orderedBy:null});
-    save();render();toast('Request added for '+it.name);
+$('invSearch').addEventListener('input', render);
+function requestItem(it) {
+  if (openReqFor(it.id)) { alert('There is already an open request for ' + it.name + '.'); return; }
+  withStaff(name => {
+    if (openReqFor(it.id)) return;
+    run(api().createRequest(it, name), 'Request added for ' + it.name);
   });
 }
-function renderInventory(){
-  var q=$('invSearch').value.trim().toLowerCase();
-  var lows=state.items.filter(isLow);
-  var b=$('lowBanner');
-  if(lows.length){b.classList.remove('hidden');b.textContent='⚠️ Low stock ('+lows.length+'): '+lows.map(function(i){return i.name;}).join(', ');}else b.classList.add('hidden');
-  var nc=state.items.filter(function(i){return !hasNum(i.qty)||!hasNum(i.threshold);}).length;
-  var cn=$('countNote');if(nc){cn.classList.remove('hidden');cn.textContent=nc+' item'+(nc>1?'s':'')+' not counted yet or missing a low-stock level. Tap Edit to enter the count; low-stock alerts start once both are set.';}else cn.classList.add('hidden');
-  var items=state.items.filter(function(i){return !q||i.name.toLowerCase().indexOf(q)>=0||(i.barcode||'').indexOf(q)>=0;});
-  items.sort(function(a,b){return (isLow(b)-isLow(a))||a.name.localeCompare(b.name);});
-  var el=$('invList');
-  if(!items.length){el.innerHTML='<div class="empty">No items'+(q?' match':' yet. Tap + Add.')+'</div>';return;}
-  el.innerHTML=items.map(function(i){var low=isLow(i),r=openReqFor(i.id);
-    return '<div class="card'+(low?' low':'')+'" data-id="'+i.id+'"><div class="item-top"><div><div class="item-name">'+esc(i.name)+(low?'<span class="pill low">LOW</span>':'')+(r?'<span class="pill req">Requested</span>':'')+'</div>'+
-    '<div class="meta">'+(hasNum(i.threshold)?'Low at '+esc(i.threshold):'Low-stock level not set')+' · '+esc(i.supplier)+(i.barcode?' · #'+esc(i.barcode):'')+'</div>'+
-    ((i.usualOrder!=null||i.lastBought)?'<div class="meta helper">'+(i.usualOrder!=null?'Usual order: '+esc(i.usualOrder):'')+(i.usualOrder!=null&&i.lastBought?' · ':'')+(i.lastBought?'Last bought '+esc(fmtDate(i.lastBought)):'')+'</div>':'')+'</div>'+
-    (hasNum(i.qty)?'<div class="qty">'+esc(i.qty)+'<br><small>'+esc(i.unit)+'</small></div>':'<div class="qty nc">Not counted<br><small>'+esc(i.unit)+'</small></div>')+'</div>'+
-    '<div class="actions"><button class="btn small'+(r?'':' primary')+'" data-act="req"'+(r?' disabled':'')+'>'+(r?'Requested ✓':'Request')+'</button><button class="btn small" data-act="edit">Edit</button><button class="btn small" data-act="del">Delete</button></div></div>';}).join('');
+function renderInventory() {
+  const el = $('invList');
+  if (!ready) { el.innerHTML = '<div class="empty">Connecting to shared data…</div>'; $('lowBanner').classList.add('hidden'); $('countNote').classList.add('hidden'); return; }
+  const q = $('invSearch').value.trim().toLowerCase();
+  const lows = state.items.filter(isLow);
+  const b = $('lowBanner');
+  if (lows.length) { b.classList.remove('hidden'); b.textContent = '⚠️ Low stock (' + lows.length + '): ' + lows.map(i => i.name).join(', '); } else b.classList.add('hidden');
+  const nc = state.items.filter(i => !hasNum(i.qty) || !hasNum(i.threshold)).length;
+  const cn = $('countNote'); if (nc) { cn.classList.remove('hidden'); cn.textContent = nc + ' item' + (nc > 1 ? 's' : '') + ' not counted yet or missing a low-stock level. Tap Edit to enter the count; low-stock alerts start once both are set.'; } else cn.classList.add('hidden');
+  const items = state.items.filter(i => !q || i.name.toLowerCase().indexOf(q) >= 0 || (i.barcode || '').indexOf(q) >= 0);
+  items.sort((a, b) => (isLow(b) - isLow(a)) || a.name.localeCompare(b.name));
+  if (!items.length) { el.innerHTML = '<div class="empty">No items' + (q ? ' match' : ' yet. Tap + Add.') + '</div>'; return; }
+  el.innerHTML = items.map(i => {
+    const low = isLow(i), r = openReqFor(i.id);
+    return '<div class="card' + (low ? ' low' : '') + '" data-id="' + esc(i.id) + '"><div class="item-top"><div><div class="item-name">' + esc(i.name) + (low ? '<span class="pill low">LOW</span>' : '') + (r ? '<span class="pill req">Requested</span>' : '') + '</div>' +
+      '<div class="meta">' + (hasNum(i.threshold) ? 'Low at ' + esc(i.threshold) : 'Low-stock level not set') + ' · ' + esc(i.supplier) + (i.barcode ? ' · #' + esc(i.barcode) : '') + '</div>' +
+      ((i.usualOrder != null || i.lastBought) ? '<div class="meta helper">' + (i.usualOrder != null ? 'Usual order: ' + esc(i.usualOrder) : '') + (i.usualOrder != null && i.lastBought ? ' · ' : '') + (i.lastBought ? 'Last bought ' + esc(fmtDate(i.lastBought)) : '') + '</div>' : '') + '</div>' +
+      (hasNum(i.qty) ? '<div class="qty">' + esc(i.qty) + '<br><small>' + esc(i.unit) + '</small></div>' : '<div class="qty nc">Not counted<br><small>' + esc(i.unit) + '</small></div>') + '</div>' +
+      '<div class="actions"><button class="btn small' + (r ? '' : ' primary') + '" data-act="req"' + (r ? ' disabled' : '') + '>' + (r ? 'Requested ✓' : 'Request') + '</button><button class="btn small" data-act="edit">Edit</button><button class="btn small" data-act="del">Delete</button></div></div>';
+  }).join('');
 }
-$('invList').addEventListener('click',function(e){var btn=e.target.closest('button[data-act]');if(!btn)return;var id=btn.closest('.card').getAttribute('data-id');var it=state.items.find(function(i){return i.id===id;});if(!it)return;
-  var a=btn.getAttribute('data-act');
-  if(a==='req')requestItem(it);
-  else if(a==='edit')openItem(it,false);
-  else if(a==='del')confirmDel('Delete this item?',function(){state.items=state.items.filter(function(i){return i.id!==id;});
-    state.requests=state.requests.filter(function(r){return !(r.itemId===id&&r.status==='Requested');});save();render();});
+$('invList').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const id = btn.closest('.card').getAttribute('data-id');
+  const it = state.items.find(i => i.id === id); if (!it) return;
+  const a = btn.getAttribute('data-act');
+  if (a === 'req') requestItem(it);
+  else if (a === 'edit') openItem(it, false);
+  else if (a === 'del') confirmDel('Delete this item?', () => run(api().deleteItem(id)));
 });
 
 /* requests */
-function renderRequests(){
-  var open=state.requests.filter(function(r){return r.status==='Requested';});
-  var html='';
-  if(!open.length)html='<div class="empty">No open requests.</div>';
-  var sups=SUPPLIERS.slice();open.forEach(function(r){if(sups.indexOf(r.supplier)<0)sups.push(r.supplier);});
-  sups.forEach(function(s){var list=open.filter(function(r){return r.supplier===s;});if(!list.length)return;
-    html+='<div class="section-title">'+esc(s)+' ('+list.length+')</div>'+list.map(function(r){
-      var it=state.items.find(function(i){return i.id===r.itemId;});
-      return '<div class="card" data-id="'+r.id+'"><div class="item-name">'+esc(r.itemName)+'<span class="pill req">Requested</span></div>'+
-      '<div class="meta">By '+esc(r.requester)+' · '+fmt(r.requestedAt)+(it?' · On hand: '+(hasNum(it.qty)?esc(it.qty)+' '+esc(it.unit):'not counted'):'')+(it&&it.usualOrder!=null?' · Usual order: '+esc(it.usualOrder):'')+'</div>'+
-      '<div class="actions"><button class="btn small primary" data-act="ordered">Mark Ordered</button><button class="btn small" data-act="cancel">Cancel request</button></div></div>';}).join('');
+function renderRequests() {
+  const open = state.requests.filter(r => r.status === 'open');
+  let html = '';
+  if (!ready) html = '<div class="empty">Connecting to shared data…</div>';
+  else if (!open.length) html = '<div class="empty">No open requests.</div>';
+  const sups = SUPPLIERS.slice(); open.forEach(r => { if (sups.indexOf(r.supplier) < 0) sups.push(r.supplier); });
+  sups.forEach(s => {
+    const list = open.filter(r => r.supplier === s); if (!list.length) return;
+    html += '<div class="section-title">' + esc(s) + ' (' + list.length + ')</div>' + list.map(r => {
+      const it = state.items.find(i => i.id === r.itemId);
+      return '<div class="card" data-id="' + esc(r.id) + '"><div class="item-name">' + esc(r.itemName) + '<span class="pill req">Requested</span></div>' +
+        '<div class="meta">By ' + esc(r.requester) + ' · ' + fmt(r.requestedAt) + (it ? ' · On hand: ' + (hasNum(it.qty) ? esc(it.qty) + ' ' + esc(it.unit) : 'not counted') : '') + (it && it.usualOrder != null ? ' · Usual order: ' + esc(it.usualOrder) : '') + '</div>' +
+        '<div class="actions"><button class="btn small primary" data-act="ordered">Mark Ordered</button><button class="btn small" data-act="cancel">Cancel request</button></div></div>';
+    }).join('');
   });
-  $('reqOpen').innerHTML=html;
-  var hist=state.requests.filter(function(r){return r.status==='Ordered';}).sort(function(a,b){return (b.orderedAt||'').localeCompare(a.orderedAt||'');});
-  $('reqHist').innerHTML=hist.length?hist.map(function(r){return '<div class="card"><div class="item-name">'+esc(r.itemName)+'<span class="pill ord">Ordered</span></div><div class="meta">'+esc(r.supplier)+' · requested by '+esc(r.requester)+' '+fmt(r.requestedAt)+'<br>Marked ordered '+fmt(r.orderedAt)+(r.orderedBy?' by '+esc(r.orderedBy):'')+'</div></div>';}).join(''):'<div class="empty">Nothing ordered yet.</div>';
-  $('reqDot').textContent=open.length?open.length:'';
+  $('reqOpen').innerHTML = html;
+  const hist = state.requests.filter(r => r.status === 'ordered').sort((a, b) => (b.orderedAt || 0) - (a.orderedAt || 0));
+  $('reqHist').innerHTML = hist.length ? hist.map(r => '<div class="card"><div class="item-name">' + esc(r.itemName) + '<span class="pill ord">Ordered</span></div><div class="meta">' + esc(r.supplier) + ' · requested by ' + esc(r.requester) + ' ' + fmt(r.requestedAt) + '<br>Marked ordered ' + fmt(r.orderedAt) + (r.orderedBy ? ' by ' + esc(r.orderedBy) : '') + '</div></div>').join('') : '<div class="empty">Nothing ordered yet.</div>';
+  $('reqDot').textContent = open.length ? open.length : '';
 }
-$('reqOpen').addEventListener('click',function(e){var btn=e.target.closest('button[data-act]');if(!btn)return;var id=btn.closest('.card').getAttribute('data-id');var r=state.requests.find(function(x){return x.id===id;});if(!r)return;
-  if(btn.getAttribute('data-act')==='ordered'){withStaff(function(name){r.status='Ordered';r.orderedAt=now();r.orderedBy=name;save();render();});}
-  else confirmDel('Cancel this request?',function(){state.requests=state.requests.filter(function(x){return x.id!==id;});save();render();});
+$('reqOpen').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const id = btn.closest('.card').getAttribute('data-id');
+  const r = state.requests.find(x => x.id === id); if (!r) return;
+  if (btn.getAttribute('data-act') === 'ordered') withStaff(name => run(api().closeRequest(r, name, 'ordered'), 'Marked ordered'));
+  else confirmDel('Cancel this request?', () => run(api().closeRequest(r, staff || '', 'cancelled')), 'Cancel request');
 });
 
 /* chat */
-function renderChat(){var el=$('chatList');
-  el.innerHTML=state.chat.length?state.chat.map(function(m){return '<div class="msg'+(m.from===state.staff?' me':'')+'"><div class="who">'+esc(m.from)+' · '+fmt(m.at)+'</div><div class="txt">'+esc(m.text)+'</div></div>';}).join(''):'<div class="empty">No messages yet. Say hi to the team.</div>';
+function renderChat() {
+  const el = $('chatList');
+  if (!ready) { el.innerHTML = '<div class="empty">Connecting to shared data…</div>'; return; }
+  el.innerHTML = state.chat.length ? state.chat.map(m => '<div class="msg' + (m.from === staff ? ' me' : '') + '"><div class="who">' + esc(m.from) + ' · ' + fmt(m.ts) + '</div><div class="txt">' + esc(m.text) + '</div></div>').join('') : '<div class="empty">No messages yet. Say hi to the team.</div>';
 }
-$('chatForm').onsubmit=function(e){e.preventDefault();var t=$('chatInput').value.trim();if(!t)return;
-  withStaff(function(name){state.chat.push({id:uid(),from:name,text:t,at:now()});if(state.chat.length>500)state.chat=state.chat.slice(-500);save();$('chatInput').value='';render();window.scrollTo(0,document.body.scrollHeight);});
+$('chatForm').onsubmit = e => {
+  e.preventDefault();
+  const t = $('chatInput').value.trim().slice(0, 1000); if (!t) return;
+  if (!canWrite()) return;
+  withStaff(name => { $('chatInput').value = ''; run(api().sendChat(name, t)); setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 50); });
 };
 
 /* tasks */
-$('addTaskBtn').onclick=function(){$('tTitle').value='';$('tNotes').value='';show('taskModal');};
-$('taskForm').onsubmit=function(e){e.preventDefault();var t=$('tTitle').value.trim();if(!t)return;
-  state.tasks.unshift({id:uid(),title:t,notes:$('tNotes').value.trim(),done:false,createdBy:state.staff||'',createdAt:now(),doneAt:null});save();hide('taskModal');render();};
-function renderTasks(){var el=$('taskList');
-  var list=state.tasks.slice().sort(function(a,b){return (a.done-b.done);});
-  el.innerHTML=list.length?list.map(function(t){return '<div class="card task'+(t.done?' done':'')+'" data-id="'+t.id+'"><input type="checkbox" aria-label="Complete" '+(t.done?'checked':'')+'><div class="t"><div class="tt item-name" style="font-size:16px">'+esc(t.title)+'</div>'+(t.notes?'<div class="meta">'+esc(t.notes)+'</div>':'')+'<div class="meta">'+(t.createdBy?esc(t.createdBy)+' · ':'')+fmt(t.createdAt)+(t.done?' · done '+fmt(t.doneAt):'')+'</div></div><button class="btn small" data-act="del">Delete</button></div>';}).join(''):'<div class="empty">No tasks. Tap + Add.</div>';
+$('addTaskBtn').onclick = () => { if (!canWrite()) return; $('tTitle').value = ''; $('tNotes').value = ''; show('taskModal'); };
+$('taskForm').onsubmit = e => { e.preventDefault(); const t = $('tTitle').value.trim(); if (!t) return; hide('taskModal'); run(api().addTask(t, $('tNotes').value.trim())); };
+function renderTasks() {
+  const el = $('taskList');
+  if (!ready) { el.innerHTML = '<div class="empty">Connecting to shared data…</div>'; return; }
+  const list = state.tasks.slice().sort((a, b) => (a.done - b.done));
+  el.innerHTML = list.length ? list.map(t => '<div class="card task' + (t.done ? ' done' : '') + '" data-id="' + esc(t.id) + '"><input type="checkbox" aria-label="Complete" ' + (t.done ? 'checked' : '') + '><div class="t"><div class="tt item-name" style="font-size:16px">' + esc(t.title) + '</div>' + (t.notes ? '<div class="meta">' + esc(t.notes) + '</div>' : '') + '<div class="meta">' + (t.createdBy ? esc(t.createdBy) + ' · ' : '') + fmt(t.createdAt) + (t.done ? ' · done ' + fmt(t.doneAt) : '') + '</div></div><button class="btn small" data-act="del">Delete</button></div>').join('') : '<div class="empty">No tasks. Tap + Add.</div>';
 }
-$('taskList').addEventListener('change',function(e){if(e.target.type!=='checkbox')return;var id=e.target.closest('.card').getAttribute('data-id');var t=state.tasks.find(function(x){return x.id===id;});if(!t)return;t.done=e.target.checked;t.doneAt=t.done?now():null;save();render();});
-$('taskList').addEventListener('click',function(e){var btn=e.target.closest('button[data-act="del"]');if(!btn)return;var id=btn.closest('.card').getAttribute('data-id');
-  confirmDel('Delete this task?',function(){state.tasks=state.tasks.filter(function(x){return x.id!==id;});save();render();});});
+$('taskList').addEventListener('change', e => { if (e.target.type !== 'checkbox') return; const id = e.target.closest('.card').getAttribute('data-id'); run(api().setTaskDone(id, e.target.checked)); });
+$('taskList').addEventListener('click', e => { const btn = e.target.closest('button[data-act="del"]'); if (!btn) return; const id = btn.closest('.card').getAttribute('data-id'); confirmDel('Delete this task?', () => run(api().deleteTask(id))); });
 
-/* toast */
-var toastEl=null;function toast(m){if(!toastEl){toastEl=document.createElement('div');toastEl.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom));background:#111;color:#fff;padding:10px 16px;border-radius:999px;z-index:30;font-size:15px;transition:opacity .3s';document.body.appendChild(toastEl);}toastEl.textContent=m;toastEl.style.opacity=1;clearTimeout(toast._t);toast._t=setTimeout(function(){toastEl.style.opacity=0;},1800);}
+function render() { renderInventory(); renderRequests(); renderChat(); renderTasks(); }
 
-/* sync across tabs on same device */
-window.addEventListener('storage',function(e){if(e.key===KEY){load();renderStaff();render();}});
-
-function render(){renderInventory();renderRequests();renderChat();renderTasks();}
-load();renderStaff();render();
-if(!state.staff)setTimeout(function(){withStaff(function(){});},300);
-window.__storeHub={get state(){return state;}};
-})();
+/* boot */
+renderStaff(); setBadge(); render();
+if (!staff) setTimeout(() => withStaff(() => {}), 300);
+startFirestore().catch(e => {
+  console.error('Firebase start failed', e);
+  const code = String(e && e.code || '');
+  fallback(code.includes('auth/') ? 'could not sign in to the shared database (' + code + ')' : (e && e.message) || 'could not connect');
+});
+window.__storeHub = { get state() { return state; }, get mode() { return mode; }, get online() { return liveOnline; } };
 </script>
 </body>
 </html>
