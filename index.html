@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#b71c1c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Store Hub">
+<title>Store Hub</title>
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Store%20Hub%22%2C%22short_name%22%3A%22Store%20Hub%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f5f5f5%22%2C%22theme_color%22%3A%22%23b71c1c%22%7D">
+<style>
+:root{--red:#b71c1c;--bg:#f4f4f5;--card:#fff;--text:#1f2328;--muted:#6b7280;--line:#e5e7eb;--warn:#fff4e5;--warnb:#f59e0b;--green:#15803d}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--red);color:#fff;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;display:flex;align-items:center;gap:12px}
+header h1{margin:0;font-size:22px}
+header .sub{font-size:13px;opacity:.85}
+header .right{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.badge{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);border-radius:999px;padding:2px 10px;font-size:12px}
+.staffbtn{background:none;border:0;color:#fff;font-size:13px;text-decoration:underline;padding:4px 0;min-height:32px;cursor:pointer}
+main{padding:12px 12px calc(96px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:5;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;min-height:60px;border:0;background:none;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;position:relative}
+nav button .ic{display:block;font-size:20px}
+nav button.active{color:var(--red)}
+nav .dot{position:absolute;top:6px;right:calc(50% - 22px);background:var(--red);color:#fff;border-radius:999px;font-size:11px;padding:0 6px;min-width:18px}
+.dot:empty{display:none}
+.toolbar{display:flex;gap:8px;margin:4px 0 12px;flex-wrap:wrap;align-items:center}
+.toolbar h2{margin:0;font-size:20px;flex:1}
+.btn{min-height:48px;padding:0 16px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:16px;font-weight:600;cursor:pointer;color:var(--text)}
+.btn.primary{background:var(--red);color:#fff;border-color:var(--red)}
+.btn.danger{background:#dc2626;color:#fff;border-color:#dc2626}
+.btn.small{min-height:44px;padding:0 12px;font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.card.low{background:var(--warn);border-color:var(--warnb)}
+.item-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.item-name{font-weight:700;font-size:17px}
+.meta{color:var(--muted);font-size:14px}
+.qty{font-size:22px;font-weight:800;text-align:right;white-space:nowrap}
+.qty.nc{font-size:14px;font-weight:700;color:var(--muted)}
+.meta.helper{font-size:13px}
+.qty small{font-size:13px;font-weight:500;color:var(--muted)}
+.pill{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+.pill.low{background:var(--warnb);color:#fff}
+.pill.req{background:#dbeafe;color:#1e40af}
+.pill.ord{background:#dcfce7;color:var(--green)}
+.actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.actions .btn{flex:1}
+.banner{background:var(--warn);border:1px solid var(--warnb);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-weight:600}
+.note{color:var(--muted);font-size:13px;margin:4px 0 12px}
+.section-title{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:18px 4px 8px}
+.empty{color:var(--muted);text-align:center;padding:24px 8px}
+.hidden{display:none!important}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.modal{background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
+@media(min-width:600px){.modal-bg{align-items:center}.modal{border-radius:18px}}
+.modal h3{margin:0 0 12px;font-size:19px}
+label{display:block;font-size:14px;font-weight:600;margin:10px 0 4px}
+input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12px;border:1px solid #cfd4da;border-radius:10px;background:#fff;color:var(--text);font-family:inherit}
+.row2{display:flex;gap:10px}.row2>div{flex:1}
+.modal-actions{display:flex;gap:10px;margin-top:16px}.modal-actions .btn{flex:1}
+#chatList{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.msg{max-width:85%;padding:8px 12px;border-radius:14px;background:#fff;border:1px solid var(--line);align-self:flex-start}
+.msg.me{align-self:flex-end;background:#fde8e8;border-color:#f5c2c2}
+.msg .who{font-size:12px;font-weight:700;color:var(--muted)}
+.msg .txt{white-space:pre-wrap;word-wrap:break-word}
+.chatbar{position:fixed;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--line);padding:8px 12px;display:flex;gap:8px;z-index:4}
+.chatbar input{flex:1}
+.task{display:flex;align-items:center;gap:10px}
+.task input[type=checkbox]{width:28px;height:28px;min-height:0;flex:none;accent-color:var(--red)}
+.task .t{flex:1}
+.task.done .t .tt{text-decoration:line-through;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Store Hub</h1><div class="sub">Inventory · Chat · Tasks</div></div>
+  <div class="right"><span class="badge" id="modeBadge">Local mode</span><button class="staffbtn" id="staffBtn">Staff: —</button></div>
+</header>
+
+<main>
+<section id="tab-inventory">
+  <div id="lowBanner" class="banner hidden"></div>
+  <div id="countNote" class="note hidden"></div>
+  <div class="toolbar"><h2>Inventory</h2>
+    <button class="btn small" id="scanAddBtn">Scan + Add</button>
+    <button class="btn small primary" id="addItemBtn">+ Add</button>
+  </div>
+  <input id="invSearch" type="search" placeholder="Search items or barcode" style="margin-bottom:12px">
+  <div id="invList"></div>
+</section>
+
+<section id="tab-requests" class="hidden">
+  <div class="toolbar"><h2>Reorder Requests</h2></div>
+  <p class="note" style="color:var(--text);font-size:15px">Employees can request more of an item. Mark as ordered when done.</p>
+  <p class="note">Store Hub never orders automatically.</p>
+  <div id="reqOpen"></div>
+  <div class="section-title">History (Ordered)</div>
+  <div id="reqHist"></div>
+</section>
+
+<section id="tab-chat" class="hidden">
+  <div class="toolbar"><h2>Team Chat</h2></div>
+  <p class="note">Messages are saved on this device only.</p>
+  <div id="chatList"></div>
+  <div style="height:70px"></div>
+</section>
+
+<section id="tab-tasks" class="hidden">
+  <div class="toolbar"><h2>Tasks</h2><button class="btn small primary" id="addTaskBtn">+ Add</button></div>
+  <div id="taskList"></div>
+</section>
+</main>
+
+<form class="chatbar hidden" id="chatForm" autocomplete="off">
+  <input id="chatInput" placeholder="Message the team" maxlength="1000">
+  <button class="btn primary" type="submit">Send</button>
+</form>
+
+<nav>
+  <button data-tab="inventory" class="active"><span class="ic">📦</span>Inventory</button>
+  <button data-tab="requests"><span class="ic">🛒</span>Requests<span class="dot" id="reqDot"></span></button>
+  <button data-tab="chat"><span class="ic">💬</span>Chat</button>
+  <button data-tab="tasks"><span class="ic">✅</span>Tasks</button>
+</nav>
+
+<!-- Item modal -->
+<div class="modal-bg hidden" id="itemModal"><form class="modal" id="itemForm" autocomplete="off">
+  <h3 id="itemModalTitle">Add Item</h3>
+  <label for="fBarcode">Barcode (type or use a scanner keyboard)</label>
+  <input id="fBarcode" inputmode="numeric" placeholder="Optional">
+  <label for="fName">Item name</label>
+  <input id="fName" required placeholder="e.g. 16&quot; pizza boxes">
+  <div class="row2">
+    <div><label for="fQty">Qty on hand</label><input id="fQty" type="number" inputmode="decimal" min="0" step="any" placeholder="Not counted"></div>
+    <div><label for="fThr">Low-stock at</label><input id="fThr" type="number" inputmode="decimal" min="0" step="any" placeholder="Not set"></div>
+  </div>
+  <label for="fUnit">Unit</label>
+  <input id="fUnit" placeholder="e.g. cases, lbs, jugs" required>
+  <label for="fSup">Preferred supplier</label>
+  <select id="fSup"><option>Restaurant Depot</option><option>Sam's Club</option></select>
+  <div class="modal-actions"><button type="button" class="btn" data-close="itemModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
+</form></div>
+
+<!-- Task modal -->
+<div class="modal-bg hidden" id="taskModal"><form class="modal" id="taskForm" autocomplete="off">
+  <h3>Add Task</h3>
+  <label for="tTitle">Task</label>
+  <input id="tTitle" required placeholder="e.g. Clean fryer #2">
+  <label for="tNotes">Notes (optional)</label>
+  <input id="tNotes">
+  <div class="modal-actions"><button type="button" class="btn" data-close="taskModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
+</form></div>
+
+<!-- Staff modal -->
+<div class="modal-bg hidden" id="staffModal"><form class="modal" id="staffForm" autocomplete="off">
+  <h3>Your name</h3>
+  <p class="note">Used on requests, chat and tasks. Saved on this device.</p>
+  <label for="sName">Staff name</label>
+  <input id="sName" required maxlength="40">
+  <div class="modal-actions"><button type="button" class="btn" data-close="staffModal">Cancel</button><button type="submit" class="btn primary">Save</button></div>
+</form></div>
+
+<!-- Confirm modal -->
+<div class="modal-bg hidden" id="confirmModal"><div class="modal">
+  <h3 id="confirmText">Delete this item?</h3>
+  <div class="modal-actions"><button type="button" class="btn" id="confirmCancel">Cancel</button><button type="button" class="btn danger" id="confirmOk">Delete</button></div>
+</div></div>
+
+<script>
+(function(){
+'use strict';
+var KEY='storehub.v2';
+var SUPPLIERS=["Restaurant Depot","Sam's Club"];
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function now(){return new Date().toISOString();}
+/* Real items from purchase history. On-hand qty and low-stock level are intentionally blank (not counted yet). */
+var SEED_ITEMS=[["Belmont Beef Flavor Base 25 lb Tub", "Restaurant Depot", "each", 2, "2026-03-10"], ["Belmont Chicken Soup Base 25 lb Tub", "Restaurant Depot", "each", 1, "2026-10-09"], ["Chef's Quality Hot Sauce gallon", "Restaurant Depot", "each", 20, "2026-10-09"], ["Chef's Quality Tonggol Chunk Light Tuna in Water 66.5 oz can", "Restaurant Depot", "each", 1, "2026-05-23"], ["Delta Star Parboiled Rice 25 lbs", "Restaurant Depot", "each", 1, "2026-08-03"], ["Domino Light Brown Sugar 7 lb", "Restaurant Depot", "each", 1, "2026-07-27"], ["Heinz Mustard Packets 500 ct", "Restaurant Depot", "pack", 1, "2026-05-05"], ["Hellmann's Real Mayonnaise Packets 210 ct", "Restaurant Depot", "pack", 1.5, "2026-10-09"], ["Roland Arborio Rice 11 lbs", "Restaurant Depot", "each", 2, "2026-10-09"], ["Sunset 2300 POS Carbonless Printer Rolls 2-ply 3\"x100' 10/tray", "Restaurant Depot", "pack", 3, "2026-10-09"], ["Winco Oven Mitt Flame Retardant 17\"", "Restaurant Depot", "each", 3, "2026-09-14"], ["Alliance 2-Ply Carbonless Receipt Rolls 3\"x100' White/Canary 50 rolls", "Sam's Club", "pack", 6, "2026-10-09"], ["BIC Round Stic Xtra Life Medium Black 96 ct", "Sam's Club", "pack", 1, "2026-04-09"], ["Folgers Classic Medium Roast Ground Coffee 43.5 oz", "Sam's Club", "each", 6, "2026-10-21"], ["Hefty Slider Storage Bags Gallon 136 ct", "Sam's Club", "pack", 4, "2026-10-02"], ["Lipton Onion Recipe Soup & Dip Mix 2 oz 6 pk", "Sam's Club", "pack", 12, "2026-10-21"], ["Member's Mark 33 Gal Commercial Can Liners 320 ct", "Sam's Club", "pack", 5, "2026-08-21"], ["Member's Mark 50 Gal Commercial Can Liners 220 ct", "Sam's Club", "pack", 5, "2026-10-21"], ["Member's Mark Ibuprofen 200 mg 1200 ct", "Sam's Club", "each", 1, "2026-04-09"], ["Post-it Super Sticky Notes Canary Yellow 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["Post-it Super Sticky Notes Miami Colors 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["T-Shirt Carry-Out Bags 11.5x6.5x22, 1,000 ct", "Sam's Club", "pack", 8, "2026-05-01"]];
+function seed(){
+  return SEED_ITEMS.map(function(r){return {id:uid(),name:r[0],supplier:r[1],unit:r[2],usualOrder:r[3],lastBought:r[4],qty:null,threshold:null,barcode:''};});
+}
+var state;
+function load(){
+  try{state=JSON.parse(localStorage.getItem(KEY));}catch(e){state=null;}
+  if(!state||typeof state!=='object')state={};
+  var needSeed=!Array.isArray(state.items); /* seed only when no inventory has ever been stored */
+  if(needSeed)state.items=seed();
+  ['requests','chat','tasks'].forEach(function(k){if(!Array.isArray(state[k]))state[k]=[];});
+  if(typeof state.staff!=='string')state.staff='';
+  if(needSeed)save();
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){alert('Could not save (storage full or private mode).');}}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function fmt(iso){if(!iso)return'';var d=new Date(iso);return d.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
+function $(id){return document.getElementById(id);}
+function hasNum(v){return v!==null&&v!==undefined&&v!==''&&isFinite(Number(v));}
+function isLow(it){return hasNum(it.qty)&&hasNum(it.threshold)&&Number(it.qty)<=Number(it.threshold);}
+function numOrNull(s){s=String(s).trim();if(s==='')return null;var n=Number(s);return isFinite(n)&&n>=0?n:NaN;}
+function fmtDate(d){if(!d)return'';var p=d.split('-');if(p.length!==3)return d;return new Date(+p[0],+p[1]-1,+p[2]).toLocaleDateString([], {month:'short',day:'numeric',year:'numeric'});}
+function openReqFor(itemId){return state.requests.find(function(r){return r.itemId===itemId&&r.status==='Requested';});}
+
+/* modals */
+function show(id){$(id).classList.remove('hidden');var f=$(id).querySelector('input');if(f)setTimeout(function(){f.focus();},50);}
+function hide(id){$(id).classList.add('hidden');}
+document.querySelectorAll('[data-close]').forEach(function(b){b.addEventListener('click',function(){hide(b.getAttribute('data-close'));pendingStaff=null;});});
+var confirmCb=null;
+function confirmDel(text,cb){$('confirmText').textContent=text;confirmCb=cb;show('confirmModal');}
+$('confirmCancel').onclick=function(){confirmCb=null;hide('confirmModal');};
+$('confirmOk').onclick=function(){var cb=confirmCb;confirmCb=null;hide('confirmModal');if(cb)cb();};
+
+/* staff */
+var pendingStaff=null;
+function withStaff(cb){if(state.staff){cb(state.staff);return;}pendingStaff=cb;$('sName').value='';show('staffModal');}
+$('staffBtn').onclick=function(){pendingStaff=null;$('sName').value=state.staff||'';show('staffModal');};
+$('staffForm').onsubmit=function(e){e.preventDefault();var n=$('sName').value.trim();if(!n)return;state.staff=n;save();hide('staffModal');renderStaff();var cb=pendingStaff;pendingStaff=null;if(cb)cb(n);render();};
+function renderStaff(){$('staffBtn').textContent='Staff: '+(state.staff||'set name');}
+
+/* tabs */
+var current='inventory';
+document.querySelectorAll('nav button').forEach(function(b){b.addEventListener('click',function(){setTab(b.getAttribute('data-tab'));});});
+function setTab(t){current=t;
+  document.querySelectorAll('nav button').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-tab')===t);});
+  ['inventory','requests','chat','tasks'].forEach(function(x){$('tab-'+x).classList.toggle('hidden',x!==t);});
+  $('chatForm').classList.toggle('hidden',t!=='chat');
+  render();
+  if(t==='chat')window.scrollTo(0,document.body.scrollHeight);
+}
+
+/* inventory */
+var editingId=null;
+function openItem(item,scan){
+  editingId=item?item.id:null;
+  $('itemModalTitle').textContent=item?'Edit Item':(scan?'Scan + Add Item':'Add Item');
+  $('fBarcode').value=item?item.barcode||'':'';
+  $('fName').value=item?item.name:'';
+  $('fQty').value=item&&hasNum(item.qty)?item.qty:'';
+  $('fThr').value=item&&hasNum(item.threshold)?item.threshold:'';
+  $('fUnit').value=item?item.unit:'';
+  $('fSup').value=item?item.supplier:SUPPLIERS[0];
+  show('itemModal');
+  setTimeout(function(){(scan?$('fBarcode'):$('fName')).focus();},60);
+}
+$('addItemBtn').onclick=function(){openItem(null,false);};
+$('scanAddBtn').onclick=function(){openItem(null,true);};
+$('fBarcode').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();$('fName').focus();}});
+$('itemForm').onsubmit=function(e){e.preventDefault();
+  var d={name:$('fName').value.trim(),qty:numOrNull($('fQty').value),threshold:numOrNull($('fThr').value),unit:$('fUnit').value.trim(),supplier:$('fSup').value,barcode:$('fBarcode').value.trim()};
+  if(!d.name||Number.isNaN(d.qty)||Number.isNaN(d.threshold)){alert('Quantity and low-stock level must be 0 or more (or left blank).');return;}
+  if(editingId){var it=state.items.find(function(i){return i.id===editingId;});if(it){Object.assign(it,d);
+      var r=openReqFor(it.id);if(r){r.itemName=it.name;r.supplier=it.supplier;}}}
+  else{d.id=uid();state.items.unshift(d);}
+  save();hide('itemModal');render();
+};
+$('invSearch').addEventListener('input',render);
+function requestItem(it){
+  if(openReqFor(it.id)){alert('There is already an open request for '+it.name+'.');return;}
+  withStaff(function(name){
+    if(openReqFor(it.id))return;
+    state.requests.unshift({id:uid(),itemId:it.id,itemName:it.name,supplier:it.supplier,requester:name,requestedAt:now(),status:'Requested',orderedAt:null,orderedBy:null});
+    save();render();toast('Request added for '+it.name);
+  });
+}
+function renderInventory(){
+  var q=$('invSearch').value.trim().toLowerCase();
+  var lows=state.items.filter(isLow);
+  var b=$('lowBanner');
+  if(lows.length){b.classList.remove('hidden');b.textContent='⚠️ Low stock ('+lows.length+'): '+lows.map(function(i){return i.name;}).join(', ');}else b.classList.add('hidden');
+  var nc=state.items.filter(function(i){return !hasNum(i.qty)||!hasNum(i.threshold);}).length;
+  var cn=$('countNote');if(nc){cn.classList.remove('hidden');cn.textContent=nc+' item'+(nc>1?'s':'')+' not counted yet or missing a low-stock level. Tap Edit to enter the count; low-stock alerts start once both are set.';}else cn.classList.add('hidden');
+  var items=state.items.filter(function(i){return !q||i.name.toLowerCase().indexOf(q)>=0||(i.barcode||'').indexOf(q)>=0;});
+  items.sort(function(a,b){return (isLow(b)-isLow(a))||a.name.localeCompare(b.name);});
+  var el=$('invList');
+  if(!items.length){el.innerHTML='<div class="empty">No items'+(q?' match':' yet. Tap + Add.')+'</div>';return;}
+  el.innerHTML=items.map(function(i){var low=isLow(i),r=openReqFor(i.id);
+    return '<div class="card'+(low?' low':'')+'" data-id="'+i.id+'"><div class="item-top"><div><div class="item-name">'+esc(i.name)+(low?'<span class="pill low">LOW</span>':'')+(r?'<span class="pill req">Requested</span>':'')+'</div>'+
+    '<div class="meta">'+(hasNum(i.threshold)?'Low at '+esc(i.threshold):'Low-stock level not set')+' · '+esc(i.supplier)+(i.barcode?' · #'+esc(i.barcode):'')+'</div>'+
+    ((i.usualOrder!=null||i.lastBought)?'<div class="meta helper">'+(i.usualOrder!=null?'Usual order: '+esc(i.usualOrder):'')+(i.usualOrder!=null&&i.lastBought?' · ':'')+(i.lastBought?'Last bought '+esc(fmtDate(i.lastBought)):'')+'</div>':'')+'</div>'+
+    (hasNum(i.qty)?'<div class="qty">'+esc(i.qty)+'<br><small>'+esc(i.unit)+'</small></div>':'<div class="qty nc">Not counted<br><small>'+esc(i.unit)+'</small></div>')+'</div>'+
+    '<div class="actions"><button class="btn small'+(r?'':' primary')+'" data-act="req"'+(r?' disabled':'')+'>'+(r?'Requested ✓':'Request')+'</button><button class="btn small" data-act="edit">Edit</button><button class="btn small" data-act="del">Delete</button></div></div>';}).join('');
+}
+$('invList').addEventListener('click',function(e){var btn=e.target.closest('button[data-act]');if(!btn)return;var id=btn.closest('.card').getAttribute('data-id');var it=state.items.find(function(i){return i.id===id;});if(!it)return;
+  var a=btn.getAttribute('data-act');
+  if(a==='req')requestItem(it);
+  else if(a==='edit')openItem(it,false);
+  else if(a==='del')confirmDel('Delete this item?',function(){state.items=state.items.filter(function(i){return i.id!==id;});
+    state.requests=state.requests.filter(function(r){return !(r.itemId===id&&r.status==='Requested');});save();render();});
+});
+
+/* requests */
+function renderRequests(){
+  var open=state.requests.filter(function(r){return r.status==='Requested';});
+  var html='';
+  if(!open.length)html='<div class="empty">No open requests.</div>';
+  var sups=SUPPLIERS.slice();open.forEach(function(r){if(sups.indexOf(r.supplier)<0)sups.push(r.supplier);});
+  sups.forEach(function(s){var list=open.filter(function(r){return r.supplier===s;});if(!list.length)return;
+    html+='<div class="section-title">'+esc(s)+' ('+list.length+')</div>'+list.map(function(r){
+      var it=state.items.find(function(i){return i.id===r.itemId;});
+      return '<div class="card" data-id="'+r.id+'"><div class="item-name">'+esc(r.itemName)+'<span class="pill req">Requested</span></div>'+
+      '<div class="meta">By '+esc(r.requester)+' · '+fmt(r.requestedAt)+(it?' · On hand: '+(hasNum(it.qty)?esc(it.qty)+' '+esc(it.unit):'not counted'):'')+(it&&it.usualOrder!=null?' · Usual order: '+esc(it.usualOrder):'')+'</div>'+
+      '<div class="actions"><button class="btn small primary" data-act="ordered">Mark Ordered</button><button class="btn small" data-act="cancel">Cancel request</button></div></div>';}).join('');
+  });
+  $('reqOpen').innerHTML=html;
+  var hist=state.requests.filter(function(r){return r.status==='Ordered';}).sort(function(a,b){return (b.orderedAt||'').localeCompare(a.orderedAt||'');});
+  $('reqHist').innerHTML=hist.length?hist.map(function(r){return '<div class="card"><div class="item-name">'+esc(r.itemName)+'<span class="pill ord">Ordered</span></div><div class="meta">'+esc(r.supplier)+' · requested by '+esc(r.requester)+' '+fmt(r.requestedAt)+'<br>Marked ordered '+fmt(r.orderedAt)+(r.orderedBy?' by '+esc(r.orderedBy):'')+'</div></div>';}).join(''):'<div class="empty">Nothing ordered yet.</div>';
+  $('reqDot').textContent=open.length?open.length:'';
+}
+$('reqOpen').addEventListener('click',function(e){var btn=e.target.closest('button[data-act]');if(!btn)return;var id=btn.closest('.card').getAttribute('data-id');var r=state.requests.find(function(x){return x.id===id;});if(!r)return;
+  if(btn.getAttribute('data-act')==='ordered'){withStaff(function(name){r.status='Ordered';r.orderedAt=now();r.orderedBy=name;save();render();});}
+  else confirmDel('Cancel this request?',function(){state.requests=state.requests.filter(function(x){return x.id!==id;});save();render();});
+});
+
+/* chat */
+function renderChat(){var el=$('chatList');
+  el.innerHTML=state.chat.length?state.chat.map(function(m){return '<div class="msg'+(m.from===state.staff?' me':'')+'"><div class="who">'+esc(m.from)+' · '+fmt(m.at)+'</div><div class="txt">'+esc(m.text)+'</div></div>';}).join(''):'<div class="empty">No messages yet. Say hi to the team.</div>';
+}
+$('chatForm').onsubmit=function(e){e.preventDefault();var t=$('chatInput').value.trim();if(!t)return;
+  withStaff(function(name){state.chat.push({id:uid(),from:name,text:t,at:now()});if(state.chat.length>500)state.chat=state.chat.slice(-500);save();$('chatInput').value='';render();window.scrollTo(0,document.body.scrollHeight);});
+};
+
+/* tasks */
+$('addTaskBtn').onclick=function(){$('tTitle').value='';$('tNotes').value='';show('taskModal');};
+$('taskForm').onsubmit=function(e){e.preventDefault();var t=$('tTitle').value.trim();if(!t)return;
+  state.tasks.unshift({id:uid(),title:t,notes:$('tNotes').value.trim(),done:false,createdBy:state.staff||'',createdAt:now(),doneAt:null});save();hide('taskModal');render();};
+function renderTasks(){var el=$('taskList');
+  var list=state.tasks.slice().sort(function(a,b){return (a.done-b.done);});
+  el.innerHTML=list.length?list.map(function(t){return '<div class="card task'+(t.done?' done':'')+'" data-id="'+t.id+'"><input type="checkbox" aria-label="Complete" '+(t.done?'checked':'')+'><div class="t"><div class="tt item-name" style="font-size:16px">'+esc(t.title)+'</div>'+(t.notes?'<div class="meta">'+esc(t.notes)+'</div>':'')+'<div class="meta">'+(t.createdBy?esc(t.createdBy)+' · ':'')+fmt(t.createdAt)+(t.done?' · done '+fmt(t.doneAt):'')+'</div></div><button class="btn small" data-act="del">Delete</button></div>';}).join(''):'<div class="empty">No tasks. Tap + Add.</div>';
+}
+$('taskList').addEventListener('change',function(e){if(e.target.type!=='checkbox')return;var id=e.target.closest('.card').getAttribute('data-id');var t=state.tasks.find(function(x){return x.id===id;});if(!t)return;t.done=e.target.checked;t.doneAt=t.done?now():null;save();render();});
+$('taskList').addEventListener('click',function(e){var btn=e.target.closest('button[data-act="del"]');if(!btn)return;var id=btn.closest('.card').getAttribute('data-id');
+  confirmDel('Delete this task?',function(){state.tasks=state.tasks.filter(function(x){return x.id!==id;});save();render();});});
+
+/* toast */
+var toastEl=null;function toast(m){if(!toastEl){toastEl=document.createElement('div');toastEl.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom));background:#111;color:#fff;padding:10px 16px;border-radius:999px;z-index:30;font-size:15px;transition:opacity .3s';document.body.appendChild(toastEl);}toastEl.textContent=m;toastEl.style.opacity=1;clearTimeout(toast._t);toast._t=setTimeout(function(){toastEl.style.opacity=0;},1800);}
+
+/* sync across tabs on same device */
+window.addEventListener('storage',function(e){if(e.key===KEY){load();renderStaff();render();}});
+
+function render(){renderInventory();renderRequests();renderChat();renderTasks();}
+load();renderStaff();render();
+if(!state.staff)setTimeout(function(){withStaff(function(){});},300);
+window.__storeHub={get state(){return state;}};
+})();
+</script>
+</body>
+</html>
