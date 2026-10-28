@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow,noarchive">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#b71c1c">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -75,6 +76,13 @@ input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12p
 .banner.err{background:#fde8e8;border-color:#dc2626;font-weight:600}
 .badge.live{background:#15803d;border-color:#86efac}
 .badge.off{background:#7f1d1d;border-color:#fca5a5}
+.gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px 20px calc(24px + env(safe-area-inset-bottom))}
+.gate-box{width:100%;max-width:380px;text-align:center}
+.gate-brand{color:var(--red);font-weight:800;font-size:26px;margin-bottom:4px}
+.gate h2{margin:0 0 18px;font-size:22px}
+.gate input{font-size:24px;min-height:64px;text-align:center;letter-spacing:.06em}
+.gate .btn{width:100%;min-height:58px;font-size:19px;margin-top:14px}
+.gate-err{color:#b91c1c;font-weight:700;font-size:17px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -130,6 +138,14 @@ input,select,textarea{width:100%;min-height:48px;font-size:16px;padding:10px 12p
   <button data-tab="tasks"><span class="ic">✅</span>Tasks</button>
 </nav>
 
+<!-- Store code gate (shared mode only) -->
+<div class="gate hidden" id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle"><form class="gate-box" id="gateForm" autocomplete="off">
+  <div class="gate-brand">Store Hub</div>
+  <h2 id="gateTitle">Enter store code</h2>
+  <input id="gateCode" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="200" aria-label="Store code" required>
+  <div class="gate-err hidden" id="gateErr" role="alert">Wrong code</div>
+  <button type="submit" class="btn primary" id="gateBtn">Enter</button>
+</form></div>
 <!-- Item modal -->
 <div class="modal-bg hidden" id="itemModal"><form class="modal" id="itemForm" autocomplete="off">
   <h3 id="itemModalTitle">Add Item</h3>
@@ -203,7 +219,7 @@ function seedId(i) { return 'seed-' + String(i + 1).padStart(2, '0'); }
 
 /* ---------- shared state (normalized; timestamps are ms numbers or null) ---------- */
 const state = { items: [], requests: [], chat: [], tasks: [] };
-let mode = 'connecting';   /* 'connecting' | 'live' | 'local' */
+let mode = 'connecting';   /* 'connecting' | 'gate' (needs store code) | 'live' | 'local' */
 let ready = false;         /* first data has arrived */
 let staff = '';
 try { staff = localStorage.getItem(STAFF_KEY) || ''; } catch (e) { staff = ''; }
@@ -241,6 +257,7 @@ function setBadge() {
   b.classList.remove('live', 'off');
   if (mode === 'local') { b.textContent = 'Offline/Local mode'; b.classList.add('off'); }
   else if (mode === 'live') { if (liveOnline) { b.textContent = 'Live'; b.classList.add('live'); } else { b.textContent = 'Offline – reconnecting'; b.classList.add('off'); } }
+  else if (mode === 'gate') { b.textContent = 'Locked'; b.classList.add('off'); }
   else b.textContent = 'Connecting…';
   $('chatNote').textContent = mode === 'local'
     ? 'Local mode: messages are saved on this device only.'
@@ -257,7 +274,7 @@ function showConn(msg) {
 /* =====================================================================
    Backend 1: Firestore (shared, live)
    ===================================================================== */
-let F = null, DB = null, unsubs = [], liveOnline = false, serverLoaded = false, seedTried = false;
+let F = null, DB = null, UID = null, unsubs = [], liveOnline = false, serverLoaded = false, seedTried = false, gateCheck = null;
 
 async function startFirestore() {
   const mods = await withTimeout(Promise.all([
@@ -273,17 +290,68 @@ async function startFirestore() {
   if (USE_EMULATOR) { authM.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); fsM.connectFirestoreEmulator(db, '127.0.0.1', 8080); }
   await withTimeout(authM.signInAnonymously(auth), 15000, 'sign-in timed out');
   if (mode === 'local') return;
-  F = fsM; DB = db;
-  attachListeners();
-  setTimeout(() => { if (!serverLoaded) fallback('could not reach the shared database'); }, 20000);
+  F = fsM; DB = db; UID = auth.currentUser.uid;
+  /* Store code gate: shared data is readable only by members (members/{uid} exists; enforced by rules). */
+  if (await isMemberNow()) goLive(); else showGate();
 }
+
+async function isMemberNow() {
+  const snap = await withTimeout(F.getDoc(F.doc(DB, 'members', UID)), 15000, 'could not reach the shared database');
+  return snap.exists();
+}
+function goLive() {
+  if (mode === 'local') return;
+  hideGate();
+  mode = 'connecting'; serverLoaded = false; seedTried = false;
+  setBadge(); render();
+  attachListeners();
+  setTimeout(() => { if (!serverLoaded && mode === 'connecting') fallback('could not reach the shared database'); }, 20000);
+}
+function stopListeners() { unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = []; }
+function showGate() {
+  if (mode === 'local') return;
+  stopListeners();
+  mode = 'gate'; ready = false; liveOnline = false;
+  state.items = []; state.requests = []; state.chat = []; state.tasks = [];
+  $('gateErr').classList.add('hidden'); $('gateCode').value = '';
+  $('gate').classList.remove('hidden');
+  setBadge(); render();
+  setTimeout(() => $('gateCode').focus(), 50);
+}
+function hideGate() { $('gate').classList.add('hidden'); $('gateCode').value = ''; }
+/* The typed code is sent once to create members/{uid}; it is never saved on the phone. */
+$('gateForm').onsubmit = async e => {
+  e.preventDefault();
+  if (mode !== 'gate') return;
+  const code = $('gateCode').value.trim();
+  if (!code) return;
+  const btn = $('gateBtn'), err = $('gateErr');
+  btn.disabled = true; err.classList.add('hidden');
+  try {
+    await withTimeout(F.setDoc(F.doc(DB, 'members', UID), { code: code, at: F.serverTimestamp() }), 15000, 'timeout');
+    goLive();
+  } catch (er) {
+    const c = String(er && er.code || '');
+    err.textContent = c.includes('permission-denied') ? 'Wrong code' : 'Could not connect. Check Wi-Fi/data and try again.';
+    err.classList.remove('hidden');
+    $('gateCode').value = ''; $('gateCode').focus();
+  } finally { btn.disabled = false; }
+};
 
 function attachListeners() {
   const { collection, query, orderBy, limit, where, onSnapshot } = F;
   const opt = { serverTimestamps: 'estimate' };
-  const onErr = (what) => (err) => {
+  const onErr = (what) => async (err) => {
     console.error('listener ' + what, err);
+    if (mode !== 'live' && mode !== 'connecting') return;
     const code = String(err && err.code || '');
+    if (code.includes('permission-denied')) {
+      /* Membership removed (e.g. store code changed)? Then ask for the code again instead of local mode. */
+      if (!gateCheck) gateCheck = isMemberNow().catch(() => true).finally(() => { setTimeout(() => { gateCheck = null; }, 0); });
+      const member = await gateCheck;
+      if (!member) { if (mode !== 'gate') showGate(); return; }
+    }
+    if (mode !== 'live' && mode !== 'connecting') return;
     fallback(code.includes('permission-denied')
       ? 'the shared database denied access (security rules not set up yet?)'
       : 'shared database error (' + (code || err.message || 'unknown') + ')');
@@ -292,7 +360,8 @@ function attachListeners() {
     state.items = snap.docs.map(d => { const x = d.data(opt); return { id: d.id, name: x.name || '', supplier: x.supplier || '', unit: x.unit || '', usualOrder: x.usualOrder ?? null, lastBought: x.lastBought ?? null, qty: x.qty ?? null, threshold: x.threshold ?? null, barcode: x.barcode || '', openReq: x.openReq ?? null }; });
     liveOnline = !snap.metadata.fromCache;
     if (liveOnline) { serverLoaded = true; ready = true; if (mode !== 'local') { mode = 'live'; showConn(''); } }
-    if (liveOnline && snap.empty && !seedTried) seedOnce();
+    /* Seed check once per session when the list is empty or a starter item is missing (meta/seeded decides). */
+    if (liveOnline && !seedTried && (snap.empty || !snap.docs.some(d => d.id === seedId(SEED_ITEMS.length - 1)))) seedOnce();
     setBadge(); render();
   }, onErr('items')));
 
@@ -317,29 +386,42 @@ function attachListeners() {
   }, onErr('tasks')));
 }
 
-/* Seed the 22 starter items exactly once per database: a transaction on meta/seeded plus deterministic
-   item ids (seed-01..seed-22), so two phones opening the app at the same moment cannot duplicate them. */
+/* Seed the 22 starter items exactly once per database. Deterministic ids (seed-01..seed-22) mean two
+   phones can never create duplicates; meta/seeded marks "done" so deleted starter items never come back.
+   Written in two transactions of at most 12 writes each, because every write's rule calls exists() on
+   members/{uid} and Firestore caps those calls at 20 per transaction. Each part only creates missing
+   items, and meta/seeded is written with the last part, so an interrupted seed finishes on the next load. */
 async function seedOnce(attempt) {
   seedTried = true;
   attempt = attempt || 1;
   const { runTransaction, doc, serverTimestamp } = F;
+  const half = Math.ceil(SEED_ITEMS.length / 2);
+  const parts = [[0, half], [half, SEED_ITEMS.length]];
+  let added = 0;
   try {
-    const did = await runTransaction(DB, async tx => {
-      const mref = doc(DB, 'meta', 'seeded');
-      const m = await tx.get(mref);
-      if (m.exists()) return false;
-      SEED_ITEMS.forEach((r, i) => tx.set(doc(DB, 'items', seedId(i)), {
-        name: r[0], supplier: r[1], unit: r[2], usualOrder: r[3], lastBought: r[4],
-        qty: null, threshold: null, barcode: '', openReq: null,
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-      }));
-      tx.set(mref, { at: serverTimestamp(), count: SEED_ITEMS.length });
-      return true;
-    });
-    if (did) toast('Added ' + SEED_ITEMS.length + ' starter items');
+    for (let p = 0; p < parts.length; p++) {
+      const last = p === parts.length - 1;
+      added += await runTransaction(DB, async tx => {
+        const mref = doc(DB, 'meta', 'seeded');
+        const m = await tx.get(mref);
+        if (m.exists()) return 0;
+        const refs = [], snaps = [];
+        for (let i = parts[p][0]; i < parts[p][1]; i++) { const r = doc(DB, 'items', seedId(i)); refs.push([i, r]); snaps.push(await tx.get(r)); }
+        let n = 0;
+        refs.forEach(([i, ref], k) => {
+          if (snaps[k].exists()) return;
+          const r = SEED_ITEMS[i];
+          tx.set(ref, { name: r[0], supplier: r[1], unit: r[2], usualOrder: r[3], lastBought: r[4], qty: null, threshold: null, barcode: '', openReq: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+          n++;
+        });
+        if (last) tx.set(mref, { at: serverTimestamp(), count: SEED_ITEMS.length });
+        return n;
+      });
+    }
+    if (added) toast('Added ' + added + ' starter items');
   } catch (e) {
     /* Another phone may have seeded at the same moment (its write wins and ours is rejected).
-       Retry once: the retry sees meta/seeded and does nothing. */
+       Retry once: the retry sees the items / meta/seeded and does nothing. */
     if (attempt < 2) { setTimeout(() => seedOnce(attempt + 1), 1500); return; }
     console.error('seed', e);
     if (!state.items.length) toast('Could not add starter items: ' + errText(e));
@@ -440,7 +522,7 @@ function canWrite() { if (mode === 'connecting' || !ready) { alert('Still connec
 function fallback(reason) {
   if (mode === 'local') return;
   console.warn('Falling back to local mode:', reason);
-  unsubs.forEach(u => { try { u(); } catch (e) {} }); unsubs = [];
+  stopListeners(); hideGate();
   mode = 'local'; ready = true;
   localLoad();
   showConn('Offline/Local mode: ' + reason + '. Changes are saved on this phone only and are NOT shared with other phones.');
@@ -603,7 +685,7 @@ startFirestore().catch(e => {
   const code = String(e && e.code || '');
   fallback(code.includes('auth/') ? 'could not sign in to the shared database (' + code + ')' : (e && e.message) || 'could not connect');
 });
-window.__storeHub = { get state() { return state; }, get mode() { return mode; }, get online() { return liveOnline; } };
+window.__storeHub = { get state() { return state; }, get mode() { return mode; }, get online() { return liveOnline; }, get uid() { return UID; } };
 </script>
 </body>
 </html>
