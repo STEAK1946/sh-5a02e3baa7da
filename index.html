@@ -530,8 +530,20 @@ body:not(.is-owner) .owner-only{display:none!important}
   <div id="acctBox" class="hidden">
     <p class="acct-line" id="acctLine"></p>
     <p class="note" id="acctNote"></p>
+    <button type="button" class="btn small hidden" id="myNameBtn">Change my name</button>
+    <p class="note hidden" id="acctNameHint">To change your name, ask a manager (People tab).</p>
     <div class="modal-actions"><button type="button" class="btn" data-close="staffModal">Close</button><button type="button" class="btn primary" id="switchBtn">Switch user</button></div>
   </div>
+</form></div>
+
+<!-- v4.9 Change name modal (own name for managers/owners; employee names on People) -->
+<div class="modal-bg hidden" id="renameModal"><form class="modal" id="renameForm" autocomplete="off">
+  <h3 id="renameTitle">Change name</h3>
+  <p class="note" id="renameNote"></p>
+  <label for="renameInput">Name</label>
+  <input id="renameInput" maxlength="40" autocomplete="off">
+  <div class="gate-err hidden" id="renameErr" role="alert"></div>
+  <div class="modal-actions"><button type="button" class="btn" data-close="renameModal">Cancel</button><button type="submit" class="btn primary" id="renameSave">Save</button></div>
 </form></div>
 
 <!-- Confirm modal -->
@@ -1007,6 +1019,7 @@ function renderPeople() {
     const btns = [];
     if (s.status === 'approved') { if (t.tries > 0) btns.push(['unlock', locked ? 'Unlock' : 'Clear tries', 'primary']); btns.push(['reset', 'Reset PIN', '']); btns.push(['disable', 'Turn off', 'danger']); }
     else if (s.status === 'disabled' || s.status === 'rejected') btns.push(['enable', 'Turn on', '']);
+    btns.push(['rename', 'Change name', '']);
     return '<div class="card pcard" data-sid="' + esc(s.id) + '"><div class="item-name">' + esc(s.name) + ' <span class="pill st-' + esc(s.status) + '">' + esc(STATUS_LABEL[s.status] || s.status) + '</span>' + (locked ? ' <span class="pill st-locked">Locked</span>' : '') + '</div>' +
       '<div class="meta">' + (t.tries ? t.tries + ' wrong PIN' + (t.tries === 1 ? '' : 's') + ' in a row' + (t.at ? ' · last ' + esc(fmt(t.at)) : '') : 'No wrong PINs') + (s.decidedBy ? ' · ' + esc(STATUS_LABEL[s.status] || s.status) + ' by ' + esc(s.decidedBy) : '') + '</div>' +
       (btns.length ? '<div class="actions">' + btns.map(b => '<button class="btn small ' + b[2] + '" type="button" data-pact="' + b[0] + '">' + b[1] + '</button>').join('') + '</div>' : '<p class="note">Waiting for ' + esc(s.name) + ' to choose a new PIN on a set-up phone.</p>') + '</div>';
@@ -1044,6 +1057,7 @@ $('tab-users').addEventListener('click', e => {
   else if (a === 'reject') confirmDel('Reject ' + s.name + '? They will not be able to sign in.', () => run(F.updateDoc(sref, dec('rejected')), s.name + ' rejected'), 'Reject');
   else if (a === 'enable') run(F.updateDoc(sref, dec('approved')), s.name + ' turned on');
   else if (a === 'disable') confirmDel('Turn off ' + s.name + '? Their phone is signed out right away.', () => run(F.updateDoc(sref, dec('disabled')), s.name + ' turned off'), 'Turn off');
+  else if (a === 'rename') openRename({ kind: 'staff', sid, name: s.name });
   else if (a === 'unlock') run(F.setDoc(F.doc(DB, 'pinTries', sid), { tries: 0, lastTryAt: F.serverTimestamp(), by: UID }), s.name + ' unlocked');
   else if (a === 'reset') confirmDel('Reset ' + s.name + '\'s PIN? They choose a new one on a set-up phone and you approve it.', () => { const bt = F.writeBatch(DB); bt.update(sref, dec('pin_reset')); bt.delete(F.doc(DB, 'staffSecrets', sid)); bt.set(F.doc(DB, 'pinTries', sid), { tries: 0, lastTryAt: F.serverTimestamp(), by: UID }); run(bt.commit(), s.name + '\'s PIN was reset'); }, 'Reset PIN');
 });
@@ -1060,6 +1074,39 @@ $('tab-users').addEventListener('click', e => {
   const what = u.email ? (u.name || 'this login') : 'this phone';
   confirmDel('Remove ' + what + '? ' + (u.email ? 'They are signed out right away and need the manager code to get back in.' : 'It is signed out right away and needs the store code again.'), () => run(F.deleteDoc(F.doc(DB, 'members', u.uid)), (u.email ? (u.name || 'Login') : 'Phone') + ' removed'), 'Remove');
 });
+
+/* ---------- v4.9 Change name (rules: own name for password logins; employee names by managers/owners) ---------- */
+let renameFor = null;
+function openRename(t) {
+  renameFor = t;
+  $('renameTitle').textContent = t.kind === 'self' ? 'Change my name' : 'Change name: ' + t.name;
+  $('renameNote').textContent = t.kind === 'self' ? 'Shown on counts, orders, requests, chat and tasks from now on.' : 'From now on ' + t.name + ' taps the new name to sign in (same PIN).';
+  $('renameInput').value = t.name; $('renameErr').classList.add('hidden');
+  hide('staffModal'); show('renameModal');
+}
+$('myNameBtn').onclick = () => { if (session && session.kind === 'password') openRename({ kind: 'self', name: staff }); };
+$('renameInput').addEventListener('input', () => $('renameErr').classList.add('hidden'));
+$('renameForm').onsubmit = async e => {
+  e.preventDefault(); const t = renameFor; if (!t || mode !== 'live') return;
+  const n = cleanName($('renameInput').value), err = m => { $('renameErr').textContent = m; $('renameErr').classList.remove('hidden'); };
+  if (!n) return err('Enter a name (1–40 characters)');
+  if (n === t.name) { hide('renameModal'); return; }
+  const btn = $('renameSave'); btn.disabled = true;
+  try {
+    if (t.kind === 'self') {
+      if (!session || session.kind !== 'password') return;
+      await T(F.updateDoc(F.doc(DB, 'members', UID), { name: n }));
+      if (PW.auth.currentUser) authM.updateProfile(PW.auth.currentUser, { displayName: n }).catch(er => console.warn('profile name', er));
+      session.name = n; staff = n; try { localStorage.setItem(STAFF_KEY, n); } catch (er) {}
+    } else {
+      if (!isMgr()) return;
+      if (people.staff.some(x => x.id !== t.sid && x.name.toLowerCase() === n.toLowerCase() && ['approved', 'pending', 'pin_reset'].indexOf(x.status) >= 0)) return err('Someone already has that name. Add a last initial.');
+      await T(F.updateDoc(F.doc(DB, 'staff', t.sid), { name: n, renamedBy: staff, renamedAt: F.serverTimestamp() }));
+    }
+    hide('renameModal'); renameFor = null; renderStaff(); render(); toast(t.kind === 'self' ? 'Your name is now ' + n : t.name + ' is now ' + n);
+  } catch (er) { console.warn(er); err(isDenied(er) ? 'Not allowed.' : errText(er)); }
+  finally { btn.disabled = false; }
+};
 
 function attachListeners() {
   const { collection, query, orderBy, limit, where, onSnapshot } = F;
@@ -1116,7 +1163,8 @@ function attachListeners() {
   }, err => console.warn('member doc', err)));
   if (s0 && s0.kind === 'pin') unsubs.push(onSnapshot(F.doc(DB, 'staff', s0.staffId), snap => {
     if (snap.metadata.fromCache || session !== s0) return;
-    if (!snap.exists() || snap.data().status !== 'approved') endSession('A manager turned off this sign-in. Ask a manager.');
+    if (!snap.exists() || snap.data().status !== 'approved') { endSession('A manager turned off this sign-in. Ask a manager.'); return; }
+    const nn = cleanName(snap.data().name); if (nn && nn !== staff) { staff = nn; try { localStorage.setItem(STAFF_KEY, nn); } catch (e) {} renderStaff(); render(); }
   }, err => console.warn('own staff doc', err)));
   attachPeople();
   let reqOpen = [], reqRecent = [];
@@ -1446,6 +1494,8 @@ $('staffBtn').onclick = () => {
     $('acctLine').textContent = staff + ' · ' + ROLE_LABEL[role] + (session.kind === 'pin' ? ' (PIN, on this phone)' : ' (' + ((PW.auth.currentUser && PW.auth.currentUser.email) || 'password') + ')');
     $('acctNote').textContent = 'Sign-ins end after 12 hours, or after 30 minutes without use.';
     $('switchBtn').textContent = session.kind === 'pin' ? 'Switch user' : 'Sign out';
+    $('myNameBtn').classList.toggle('hidden', session.kind !== 'password');
+    $('acctNameHint').classList.toggle('hidden', session.kind === 'password');
     $('staffModal').classList.remove('hidden');
   } else { $('sName').value = staff || ''; show('staffModal'); }
 };
