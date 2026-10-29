@@ -161,12 +161,24 @@ details summary{cursor:pointer;font-weight:600;font-size:14px;padding:6px 0;min-
 .pill.ok{background:#dcfce7;color:#166534}
 .pbtns{display:flex;flex-direction:column;gap:6px}
 .pbig{font-size:28px;font-weight:800}
+.pprev{font-size:12px;font-weight:400;color:var(--muted);white-space:nowrap}
+.pprev.loading{opacity:.6}
+.pmini{display:block;font-size:13px;margin-top:2px}
+.hmodal{position:relative;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.hmodal h3{padding-right:46px}
+.xbtn{position:absolute;top:6px;right:6px;width:44px;height:44px;border:0;border-radius:22px;background:transparent;color:var(--muted);font-size:30px;line-height:44px;padding:0;cursor:pointer}
+.hrow{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.hrow .hl{min-width:0;flex:1}.hrow .hd{font-weight:600}
+.hrow .hr{text-align:right;white-space:nowrap}
+.hrow .hp{font-weight:700;font-size:17px}.hrow .hp small{font-size:12px;font-weight:600;color:var(--muted)}
+.hrow.cur .hp{color:var(--text)}
 .prow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .lrow{padding:4px 0;border-bottom:1px dashed var(--line)}
 body:not(.is-mgr) .mgr-only{display:none!important}
 body:not(.is-owner) .owner-only{display:none!important}
+body:not(.is-logins) .logins-only{display:none!important}
 .pill.you{background:#fef3c7;color:#92400e}
-.pill.role-owner{background:#7c3aed;color:#fff}.pill.role-manager{background:#2563eb;color:#fff}.pill.role-employee{background:#e5e7eb;color:#374151}
+.pill.role-owner{background:#7c3aed;color:#fff}.pill.role-admin{background:#0f766e;color:#fff}.pill.role-manager{background:#2563eb;color:#fff}.pill.role-employee{background:#e5e7eb;color:#374151}
 .ucard select{min-height:44px;font-size:16px;padding:4px 8px;width:auto;flex:1}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .muted{color:var(--muted)}
@@ -263,7 +275,7 @@ body:not(.is-owner) .owner-only{display:none!important}
   </div>
   <div id="vDraft" class="hidden">
     <div class="toolbar"><button class="btn small" id="draftBack" type="button">&lsaquo; Count sheet</button><h2 id="draftTitle" class="vtitle">Order</h2></div>
-    <div class="banner">Nothing is ordered by this app. This is a list for Sam or Henry to place the order with the vendor.</div>
+    <div class="banner">Nothing is ordered by this app. A manager places the order with the vendor.</div>
     <div id="draftStatus"></div>
     <div id="draftBody"></div>
     <div id="draftNoPar"></div>
@@ -326,7 +338,7 @@ body:not(.is-owner) .owner-only{display:none!important}
 </section>
 
 <section id="tab-users" class="hidden">
-  <div class="toolbar"><h2>People</h2><span class="note owner-only" id="userCount"></span></div>
+  <div class="toolbar"><h2>People</h2><span class="note logins-only" id="userCount"></span></div>
   <div class="gate-err hidden" id="peopleErr"></div>
   <div class="section-title">Waiting for approval <span id="apprCount"></span></div>
   <div id="apprList"></div>
@@ -336,9 +348,11 @@ body:not(.is-owner) .owner-only{display:none!important}
   <div class="section-title">Login log</div>
   <p class="note">Last 50 sign-ins and sign-outs. Wrong PINs show as tries on the employee.</p>
   <div id="logList"></div>
-  <div class="owner-only">
-    <div class="section-title">Manager &amp; owner logins</div>
-    <p class="note">Owner only. Promote a manager to owner (or back), or remove a login.</p>
+  <div class="logins-only">
+    <div class="section-title">Logins (owners, account managers, managers)</div>
+    <p class="note">Owners: set any login to Manager, Account manager or Owner, change names, send a password reset, or remove a login.
+      Account managers: change names, send a password reset, or remove managers only. Only owners change owners and account managers.
+      New managers create their login with the manager code; an owner then picks Account manager or Make owner here.</p>
     <div id="userList"></div>
     <div class="section-title">Phones</div>
     <p class="note">Phones set up with the store code. A removed phone needs the store code again.</p>
@@ -389,7 +403,7 @@ body:not(.is-owner) .owner-only{display:none!important}
   <form class="gp hidden" id="gpNew" autocomplete="off">
     <p class="gate-hint" id="newHint">Type your name and choose a 4-digit PIN. A manager approves you once.</p>
     <label for="newName">Your name</label>
-    <input id="newName" type="text" autocomplete="off" maxlength="40" placeholder="e.g. Henry">
+    <input id="newName" type="text" autocomplete="off" maxlength="40" placeholder="e.g. Mike">
     <label for="newPin">Choose a 4-digit PIN</label>
     <input id="newPin" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off">
     <label for="newPin2">Type the PIN again</label>
@@ -508,6 +522,18 @@ body:not(.is-owner) .owner-only{display:none!important}
   <div class="modal-actions"><button type="button" class="btn" id="priceClose">Close</button></div>
 </div></div>
 
+<!-- PRICEHIST v4.10: price history pop-up (read-only; newest 10 entries). Close: X, Close, tap outside, Esc. -->
+<div class="modal-bg hidden" id="histModal"><div class="modal hmodal" role="dialog" aria-modal="true" aria-labelledby="histTitle">
+  <button type="button" class="xbtn" id="histX" aria-label="Close price history">×</button>
+  <h3 id="histTitle">Price history</h3>
+  <div class="meta" id="histSub"></div>
+  <div id="histNow" class="psum"></div>
+  <div class="section-title">Last 10 prices</div>
+  <div id="histList"></div>
+  <div id="histMore" class="meta helper"></div>
+  <div class="modal-actions"><button type="button" class="btn hidden" id="histManage">Add / confirm prices</button><button type="button" class="btn" id="histClose">Close</button></div>
+</div></div>
+
 <!-- Task modal -->
 <div class="modal-bg hidden" id="taskModal"><form class="modal" id="taskForm" autocomplete="off">
   <h3>Add Task</h3>
@@ -581,7 +607,7 @@ const USE_EMULATOR = IS_LOCALHOST && new URLSearchParams(location.search).get('e
 const SUPPLIERS = ["Restaurant Depot", "Sam's Club"];
 /* Real items from purchase history. On-hand qty and low-stock level are intentionally blank (not counted yet). */
 const SEED_ITEMS = [["Belmont Beef Flavor Base 25 lb Tub", "Restaurant Depot", "each", 2, "2026-03-10"], ["Belmont Chicken Soup Base 25 lb Tub", "Restaurant Depot", "each", 1, "2026-10-09"], ["Chef's Quality Hot Sauce gallon", "Restaurant Depot", "each", 20, "2026-10-09"], ["Chef's Quality Tonggol Chunk Light Tuna in Water 66.5 oz can", "Restaurant Depot", "each", 1, "2026-05-23"], ["Delta Star Parboiled Rice 25 lbs", "Restaurant Depot", "each", 1, "2026-08-03"], ["Domino Light Brown Sugar 7 lb", "Restaurant Depot", "each", 1, "2026-07-27"], ["Heinz Mustard Packets 500 ct", "Restaurant Depot", "pack", 1, "2026-05-05"], ["Hellmann's Real Mayonnaise Packets 210 ct", "Restaurant Depot", "pack", 1.5, "2026-10-09"], ["Roland Arborio Rice 11 lbs", "Restaurant Depot", "each", 2, "2026-10-09"], ["Sunset 2300 POS Carbonless Printer Rolls 2-ply 3\"x100' 10/tray", "Restaurant Depot", "pack", 3, "2026-10-09"], ["Winco Oven Mitt Flame Retardant 17\"", "Restaurant Depot", "each", 3, "2026-09-14"], ["Alliance 2-Ply Carbonless Receipt Rolls 3\"x100' White/Canary 50 rolls", "Sam's Club", "pack", 6, "2026-10-09"], ["BIC Round Stic Xtra Life Medium Black 96 ct", "Sam's Club", "pack", 1, "2026-04-09"], ["Folgers Classic Medium Roast Ground Coffee 43.5 oz", "Sam's Club", "each", 6, "2026-10-21"], ["Hefty Slider Storage Bags Gallon 136 ct", "Sam's Club", "pack", 4, "2026-10-02"], ["Lipton Onion Recipe Soup & Dip Mix 2 oz 6 pk", "Sam's Club", "pack", 12, "2026-10-21"], ["Member's Mark 33 Gal Commercial Can Liners 320 ct", "Sam's Club", "pack", 5, "2026-08-21"], ["Member's Mark 50 Gal Commercial Can Liners 220 ct", "Sam's Club", "pack", 5, "2026-10-21"], ["Member's Mark Ibuprofen 200 mg 1200 ct", "Sam's Club", "each", 1, "2026-04-09"], ["Post-it Super Sticky Notes Canary Yellow 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["Post-it Super Sticky Notes Miami Colors 3x3 24 pads", "Sam's Club", "pack", 1, "2026-06-12"], ["T-Shirt Carry-Out Bags 11.5x6.5x22, 1,000 ct", "Sam's Club", "pack", 8, "2026-05-01"]];
-/* Units (v4.1): preset list = the units found on Marty's master list / invoices (see build/make_import_data.py).
+/* Units (v4.1): preset list = the units found on the master list / invoices (see build/make_import_data.py).
    Invoice spellings that clearly mean the same unit show as one name; anything else is shown as typed ("Other"). */
 const UNITS = ['case', 'each', 'box', 'bag', 'tub', 'bale', 'lb', 'pack', 'pail', 'bundle', 'half'];
 const UNIT_ALIAS = { cs: 'case', ea: 'each', bx: 'box', lbs: 'lb', bndl: 'bundle' };
@@ -600,11 +626,34 @@ function seedId(i) { return 'seed-' + String(i + 1).padStart(2, '0'); }
 const state = { items: [], requests: [], chat: [], tasks: [], vendors: [], sessions: {}, serviceVendors: [] };
 let svcErr = '';   /* v4.6: service vendors listener error (shown in that list only; never drops the app to local mode) */
 let role = 'employee';     /* from members/{uid}.role; older 'staff' or missing role = employee */
-const ROLE_LABEL = { employee: 'Employee', manager: 'Manager', owner: 'Owner' };
-const ROLE_RANK = { employee: 1, manager: 2, owner: 3 };
-function normRole(r) { return r === 'owner' || r === 'manager' ? r : 'employee'; }
-function isMgr() { return (role === 'manager' || role === 'owner') && mode === 'live'; }
+/* v4.10 roles: owner > account manager (role key 'admin', shown as "Account manager") > manager > employee.
+   Password logins: manager, admin, owner. The rules enforce all of this; the UI only follows them. */
+const ROLE_LABEL = { employee: 'Employee', manager: 'Manager', admin: 'Account manager', owner: 'Owner' };
+const ROLE_RANK = { employee: 1, manager: 2, admin: 3, owner: 4 };
+const PWD_ROLES = ['manager', 'admin', 'owner'];
+function isPwdRole(r) { return PWD_ROLES.indexOf(r) >= 0; }
+function normRole(r) { return isPwdRole(r) ? r : 'employee'; }
+function isMgr() { return isPwdRole(role) && mode === 'live'; }          /* manager powers: manager, account manager, owner */
 function isOwner() { return role === 'owner' && mode === 'live'; }
+function isAcctMgr() { return role === 'admin' && mode === 'live'; }
+function canManageLogins() { return (role === 'owner' || role === 'admin') && mode === 'live'; }
+/* v4.10: prices (price lines, previous prices, History, order estimates) are for managers and up only */
+function canSeePrices() { return isMgr() || mode === 'local'; }
+/* v4.11: the price summary + invoice lines live in itemPrices/{itemId} (rules: managers and up only). Until the one-time
+   migration has run, old values may still sit on the item doc: a manager's screen uses itemPrices when there is a doc for
+   the item, else the old item fields. Employees' item objects never carry any price data. */
+const PRICE_KEYS = ['lastPrice', 'lastPriceDate', 'lastPriceInvoice', 'lastPriceBasis', 'lastPriceNet', 'lastPriceVerified', 'prevPrice', 'prevPriceDate'];
+let rawItems = [], itemPrices = {}, pricesErr = '';
+function hasLegacyPrices(raw) { return !!raw && (PRICE_KEYS.some(k => raw[k] != null) || (Array.isArray(raw.lines) && raw.lines.length > 0)); }
+function normPrices(x) { const o = {}; PRICE_KEYS.forEach(k => { o[k] = x[k] ?? null; }); o.lines = Array.isArray(x.lines) ? x.lines : null; return o; }
+function withPrices(it) {
+  const o = Object.assign({}, it);
+  if (!(mode === 'local' || isPwdRole(role))) { PRICE_KEYS.forEach(k => { o[k] = null; }); o.lines = []; return o; }
+  const pr = itemPrices[it.id];
+  if (pr) { PRICE_KEYS.forEach(k => { o[k] = pr[k]; }); if (pr.lines && pr.lines.length) o.lines = pr.lines; }
+  return o;
+}
+function applyPrices() { state.items = rawItems.map(withPrices); }
 const NAME_MAX = 40;
 function cleanName(n) { return String(n == null ? '' : n).replace(/\s+/g, ' ').trim().slice(0, NAME_MAX).trim(); }
 const SEED_VENDOR = { "Restaurant Depot": 'restaurant-depot', "Sam's Club": 'sams-club' };
@@ -650,6 +699,7 @@ function setBadge() {
   else b.textContent = 'Connecting…';
   document.body.classList.toggle('is-mgr', isMgr());
   document.body.classList.toggle('is-owner', isOwner());
+  document.body.classList.toggle('is-logins', canManageLogins());
   syncUsersListener();
   $('chatNote').textContent = mode === 'local'
     ? 'Local mode: messages are saved on this device only.'
@@ -714,7 +764,7 @@ async function decide(note) {
   const pu = PW.auth.currentUser;
   if (pu) {
     const m = await readDoc(PW.db, 'members', pu.uid).catch(() => null);
-    if (m && (m.role === 'manager' || m.role === 'owner') && freshMs(toMs(m.loginAt)))
+    if (m && isPwdRole(m.role) && freshMs(toMs(m.loginAt)))
       return startSession({ kind: 'password', uid: pu.uid, db: PW.db, staffId: null, name: cleanName(m.name), role: m.role, loginAt: toMs(m.loginAt) });
     await authM.signOut(PW.auth).catch(() => {});
     if (m && !note) note = 'Your manager login ended (12 hours). Sign in again.';
@@ -786,6 +836,7 @@ function showGate(panel, note) {
     stopListeners();
     mode = 'gate'; ready = false; liveOnline = false;
     state.items = []; state.requests = []; state.chat = []; state.tasks = []; state.vendors = []; state.sessions = {}; state.serviceVendors = [];
+    rawItems = []; itemPrices = {}; pricesErr = '';
     setBadge(); render();
   }
   $('gate').classList.remove('hidden');
@@ -827,7 +878,7 @@ function loadWho() {
   let gotS = false, gotT = false;
   const whoErr = e => {
     console.warn('who', e); stopWho();
-    if (isDenied(e)) { devSetUp = false; if (mode === 'gate') showPanel('setup', 'This phone was removed by an owner. Type the store code to set it up again.'); return; }
+    if (isDenied(e)) { devSetUp = false; if (mode === 'gate') showPanel('setup', 'This phone was removed by an owner or account manager. Type the store code to set it up again.'); return; }
     $('whoList').innerHTML = '<div class="empty">Could not load names. Check Wi-Fi/data.</div>';
   };
   whoUnsubs.push(F.onSnapshot(F.collection(DEV.db, 'staff'), snap => {
@@ -953,8 +1004,8 @@ async function pwdEnter(u, name, code) {
   };
   const go = (r, n) => { $('mPass').value = ''; startSession({ kind: 'password', uid: u.uid, db, staffId: null, name: cleanName(n), role: r, loginAt: Date.now() }); };
   if (m) {
-    if (m.role !== 'manager' && m.role !== 'owner') throw new UserError('This login has no manager access.');
-    if (m.role === 'manager' && u.emailVerified) { try { await login({ role: 'owner' }); return go('owner', m.name); } catch (er) { if (!isDenied(er)) throw er; } }
+    if (!isPwdRole(m.role)) throw new UserError('This login has no manager access.');
+    if ((m.role === 'manager' || m.role === 'admin') && u.emailVerified) { try { await login({ role: 'owner' }); return go('owner', m.name); } catch (er) { if (!isDenied(er)) throw er; } }
     await login({}); return go(m.role, m.name);
   }
   /* first time on Store Hub: the owner (verified ownerEmail, no code) or a manager (manager code) */
@@ -992,7 +1043,7 @@ function attachPeople() {
 }
 let usersUnsub = null, users = [], usersErr = '';
 function syncUsersListener() {
-  const want = isOwner() && !!F && !!UID;
+  const want = canManageLogins() && !!F && !!UID;
   if (want && !usersUnsub) {
     usersErr = '';
     usersUnsub = F.onSnapshot(F.collection(DB, 'members'), snap => {
@@ -1007,7 +1058,7 @@ function renderPeople() {
   const pend = people.staff.filter(s => s.status === 'pending');
   const dot = $('usersDot'); if (dot) { dot.textContent = pend.length || ''; dot.style.display = pend.length && isMgr() ? '' : 'none'; }
   if (current !== 'users') return;
-  if (!isMgr()) { $('apprList').innerHTML = '<div class="empty">Only managers and owners can see this.</div>'; return; }
+  if (!isMgr()) { $('apprList').innerHTML = '<div class="empty">Only managers, account managers and owners can see this.</div>'; return; }
   const errEl = $('peopleErr'); errEl.textContent = people.err; errEl.classList.toggle('hidden', !people.err);
   $('apprCount').textContent = pend.length ? '(' + pend.length + ')' : '';
   $('apprList').innerHTML = pend.length ? pend.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).map(s => '<div class="card pcard" data-sid="' + esc(s.id) + '"><div class="item-name">' + esc(s.name) + ' <span class="pill st-pending">' + (s.repinAt ? 'New PIN' : 'New employee') + '</span></div>' +
@@ -1026,21 +1077,26 @@ function renderPeople() {
   }).join('') : '<div class="empty">No employees yet.</div>';
   const KIND = { pin: 'PIN sign-in', password: 'Password sign-in', logout: 'Signed out' };
   $('logList').innerHTML = people.log.length ? '<div class="card loglist">' + people.log.map(l => '<div class="logrow"><span class="lt">' + esc(fmt(l.at)) + '</span><span class="ln">' + esc(l.name || '—') + ' <small>' + esc(ROLE_LABEL[normRole(l.role)] || '') + '</small></span><span class="lk k-' + esc(l.kind) + '">' + esc(KIND[l.kind] || l.kind) + '</span></div>').join('') + '</div>' : '<div class="empty">No sign-ins yet.</div>';
-  if (!isOwner()) return;
+  if (!canManageLogins()) return;
   if (usersErr) { $('userList').innerHTML = '<div class="empty">' + esc(usersErr) + '</div>'; $('phoneList').innerHTML = ''; return; }
-  const logins = users.filter(u => u.email && (u.role === 'manager' || u.role === 'owner')).sort((a, b) => (ROLE_RANK[b.role] - ROLE_RANK[a.role]) || (a.name || '~').localeCompare(b.name || '~'));
+  const logins = users.filter(u => u.email && isPwdRole(u.role)).sort((a, b) => (ROLE_RANK[b.role] - ROLE_RANK[a.role]) || (a.name || '~').localeCompare(b.name || '~'));
   const phones = users.filter(u => !u.email);
-  const owners = logins.filter(u => u.role === 'owner').length;
-  $('userCount').textContent = logins.length + ' login' + (logins.length === 1 ? '' : 's') + ' · ' + owners + ' owner' + (owners === 1 ? '' : 's') + ' · ' + phones.length + ' phone' + (phones.length === 1 ? '' : 's');
+  const owners = logins.filter(u => u.role === 'owner').length, acct = logins.filter(u => u.role === 'admin').length;
+  $('userCount').textContent = logins.length + ' login' + (logins.length === 1 ? '' : 's') + ' · ' + owners + ' owner' + (owners === 1 ? '' : 's') + (acct ? ' · ' + acct + ' account manager' + (acct === 1 ? '' : 's') : '') + ' · ' + phones.length + ' phone' + (phones.length === 1 ? '' : 's');
   $('userList').innerHTML = logins.length ? logins.map(u => {
-    const me = u.uid === UID;
+    const me = u.uid === UID, can = loginPerms(u, owners);
+    let ctl;
+    if (me) ctl = '<p class="note">You can\'t change your own role or remove yourself' + (isOwner() ? ' (so there is always an owner)' : '') + '. Change your name with the name button at the top.</p>';
+    else if (!can) ctl = '<p class="note">Only an owner can change ' + (u.role === 'owner' ? 'an owner' : 'an account manager') + '.</p>';
+    else ctl = '<div class="actions">' + (can.role ? '<label class="sr" for="ur-' + esc(u.uid) + '">Role</label><select id="ur-' + esc(u.uid) + '" data-urole aria-label="Role for ' + esc(u.name || u.email) + '">' +
+          PWD_ROLES.map(r => '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + (r === 'owner' && u.role !== 'owner' ? 'Make owner' : ROLE_LABEL[r]) + '</option>').join('') + '</select>' : '') +
+        '<button class="btn small" type="button" data-uact="rename">Change name</button>' +
+        '<button class="btn small" type="button" data-uact="pwreset">Send password reset</button>' +
+        (can.remove ? '<button class="btn small danger" type="button" data-uact="remove">Remove</button>' : '') + '</div>' +
+        (can.lastOwner ? '<p class="note">Last owner: can\'t be demoted or removed.</p>' : '');
     return '<div class="card ucard" data-uid="' + esc(u.uid) + '"><div class="item-name">' + esc(u.name || '(no name)') + ' <span class="pill role-' + u.role + '">' + ROLE_LABEL[u.role] + '</span>' + (me ? ' <span class="pill you">You</span>' : '') + '</div>' +
       '<div class="meta">' + esc(u.email) + ' · Last sign-in ' + (u.loginAt ? esc(fmt(u.loginAt)) : '—') + '</div>' +
-      (u.roleBy ? '<div class="meta">Role set by ' + esc(u.roleBy) + (u.roleAt ? ' · ' + esc(fmt(u.roleAt)) : '') + '</div>' : '') +
-      (me ? '<p class="note">You can\'t change your own role or remove yourself (so there is always an owner).</p>'
-        : '<div class="actions"><label class="sr" for="ur-' + esc(u.uid) + '">Role</label><select id="ur-' + esc(u.uid) + '" data-urole>' +
-          ['manager', 'owner'].map(r => '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + ROLE_LABEL[r] + '</option>').join('') +
-          '</select><button class="btn small danger" type="button" data-uact="remove">Remove</button></div>') + '</div>';
+      (u.roleBy ? '<div class="meta">Role set by ' + esc(u.roleBy) + (u.roleAt ? ' · ' + esc(fmt(u.roleAt)) : '') + '</div>' : '') + ctl + '</div>';
   }).join('') : '<div class="empty">No logins yet.</div>';
   $('phoneList').innerHTML = phones.length ? phones.map(u => {
     const on = u.staffId && freshMs(u.loginAt);
@@ -1049,6 +1105,16 @@ function renderPeople() {
       '<div class="actions"><button class="btn small danger" type="button" data-uact="remove">Remove phone</button></div></div>';
   }).join('') : '<div class="empty">No phones set up.</div>';
 }
+/* v4.10: what the signed-in person may do to another login (the rules enforce the same).
+   Owner: role (Manager / Account manager / Owner), rename, password reset, remove - anyone but themselves.
+   Account manager: rename, password reset, remove MANAGER logins only. Manager: nothing (no logins list at all). */
+function loginPerms(u, owners) {
+  if (!u || u.uid === UID || !u.email) return null;
+  if (isOwner()) { const last = u.role === 'owner' && owners <= 1; return { role: !last, rename: true, reset: true, remove: !last, lastOwner: last }; }
+  if (isAcctMgr() && u.role === 'manager') return { role: false, rename: true, reset: true, remove: true };
+  return null;
+}
+function ownerCount() { return users.filter(x => x.email && x.role === 'owner').length; }
 $('tab-users').addEventListener('click', e => {
   const b = e.target.closest('button[data-pact]'); if (!b || !isMgr()) return;
   const sid = b.closest('.pcard').getAttribute('data-sid'), s = people.staff.find(x => x.id === sid); if (!s) return;
@@ -1064,13 +1130,23 @@ $('tab-users').addEventListener('click', e => {
 $('userList').addEventListener('change', e => {
   const sel = e.target.closest('select[data-urole]'); if (!sel || !isOwner()) return;
   const u = users.find(x => x.uid === sel.closest('.ucard').getAttribute('data-uid')); if (!u || u.uid === UID) return;
-  const r = sel.value; if (r === u.role) return;
+  const r = sel.value; if (r === u.role || PWD_ROLES.indexOf(r) < 0) return;
+  const can = loginPerms(u, ownerCount()); if (!can || !can.role) { sel.value = u.role; alert('There must always be at least one owner.'); return; }
   confirmDel('Change ' + (u.name || 'this login') + ' from ' + ROLE_LABEL[u.role] + ' to ' + ROLE_LABEL[r] + '?', () => run(F.updateDoc(F.doc(DB, 'members', u.uid), { role: r, roleBy: staff, roleAt: F.serverTimestamp() }), (u.name || 'Login') + ' is now ' + ROLE_LABEL[r]), 'Change role');
   sel.value = u.role;
 });
 $('tab-users').addEventListener('click', e => {
-  const b = e.target.closest('button[data-uact="remove"]'); if (!b || !isOwner()) return;
+  const ba = e.target.closest('button[data-uact="rename"], button[data-uact="pwreset"]');
+  if (ba && canManageLogins()) {
+    const u = users.find(x => x.uid === ba.closest('.ucard').getAttribute('data-uid')), can = loginPerms(u, ownerCount()); if (!can) return;
+    if (ba.getAttribute('data-uact') === 'rename') openRename({ kind: 'login', uid: u.uid, name: u.name || '' });
+    else confirmDel('Send a password reset link to ' + u.email + '? They choose a new password from the email; nothing else changes.', () =>
+      run(authCall(authM.sendPasswordResetEmail(PW.auth, u.email)), 'Password reset link sent to ' + u.email), 'Send link');
+    return;
+  }
+  const b = e.target.closest('button[data-uact="remove"]'); if (!b || !canManageLogins()) return;
   const u = users.find(x => x.uid === b.closest('.ucard').getAttribute('data-uid')); if (!u || u.uid === UID) return;
+  if (u.email) { const can = loginPerms(u, ownerCount()); if (!can || !can.remove) return; }
   const what = u.email ? (u.name || 'this login') : 'this phone';
   confirmDel('Remove ' + what + '? ' + (u.email ? 'They are signed out right away and need the manager code to get back in.' : 'It is signed out right away and needs the store code again.'), () => run(F.deleteDoc(F.doc(DB, 'members', u.uid)), (u.email ? (u.name || 'Login') : 'Phone') + ' removed'), 'Remove');
 });
@@ -1080,7 +1156,7 @@ let renameFor = null;
 function openRename(t) {
   renameFor = t;
   $('renameTitle').textContent = t.kind === 'self' ? 'Change my name' : 'Change name: ' + t.name;
-  $('renameNote').textContent = t.kind === 'self' ? 'Shown on counts, orders, requests, chat and tasks from now on.' : 'From now on ' + t.name + ' taps the new name to sign in (same PIN).';
+  $('renameNote').textContent = t.kind === 'self' ? 'Shown on counts, orders, requests, chat and tasks from now on.' : t.kind === 'login' ? 'Shown on their counts, orders and chat from now on. Their email and password stay the same.' : 'From now on ' + t.name + ' taps the new name to sign in (same PIN).';
   $('renameInput').value = t.name; $('renameErr').classList.add('hidden');
   hide('staffModal'); show('renameModal');
 }
@@ -1098,6 +1174,9 @@ $('renameForm').onsubmit = async e => {
       await T(F.updateDoc(F.doc(DB, 'members', UID), { name: n }));
       if (PW.auth.currentUser) authM.updateProfile(PW.auth.currentUser, { displayName: n }).catch(er => console.warn('profile name', er));
       session.name = n; staff = n; try { localStorage.setItem(STAFF_KEY, n); } catch (er) {}
+    } else if (t.kind === 'login') {
+      if (!canManageLogins()) return;
+      await T(F.updateDoc(F.doc(DB, 'members', t.uid), { name: n, renamedBy: staff, renamedAt: F.serverTimestamp() }));
     } else {
       if (!isMgr()) return;
       if (people.staff.some(x => x.id !== t.sid && x.name.toLowerCase() === n.toLowerCase() && ['approved', 'pending', 'pin_reset'].indexOf(x.status) >= 0)) return err('Someone already has that name. Add a last initial.');
@@ -1126,13 +1205,18 @@ function attachListeners() {
       : 'shared database error (' + (code || err.message || 'unknown') + ')');
   };
   unsubs.push(onSnapshot(collection(DB, 'items'), { includeMetadataChanges: true }, snap => {
-    state.items = snap.docs.map(d => normItem(d.id, d.data(opt)));
+    rawItems = snap.docs.map(d => normItem(d.id, d.data(opt)));
     liveOnline = !snap.metadata.fromCache;
     if (liveOnline) { serverLoaded = true; ready = true; if (mode !== 'local') { mode = 'live'; showConn(''); } markSeen(); }
     /* Seed check once per session when the list is empty or a starter item is missing (meta/seeded decides). */
     if (liveOnline && !seedTried && isMgr() && (snap.empty || !snap.docs.some(d => d.id === seedId(SEED_ITEMS.length - 1)))) seedOnce();
-    setBadge(); render();
+    applyPrices(); setBadge(); render();
   }, onErr('items')));
+  /* v4.11 price summaries: password logins only (managers and up). If the rules refuse (v4.11 rules not published yet),
+     keep going with the old values on the item docs; never drop to local mode for this. */
+  if (session && session.kind === 'password') unsubs.push(onSnapshot(collection(DB, 'itemPrices'), snap => {
+    const m = {}; snap.docs.forEach(d => { m[d.id] = normPrices(d.data()); }); itemPrices = m; pricesErr = ''; applyPrices(); render();
+  }, err => { console.warn('itemPrices', err); pricesErr = String(err && err.code || 'error'); itemPrices = {}; applyPrices(); render(); }));
 
   unsubs.push(onSnapshot(collection(DB, 'vendors'), snap => {
     state.vendors = snap.docs.map(d => normVendor(d.id, d.data())).sort((a, b) => (a.sort - b.sort) || a.name.localeCompare(b.name));
@@ -1153,13 +1237,15 @@ function attachListeners() {
     if (snap.metadata.hasPendingWrites || session !== s0 || !s0) return;
     if (!snap.exists()) {
       if (snap.metadata.fromCache || mode === 'gate' || mode === 'local') return;
-      endSession(s0.kind === 'pin' ? 'This phone was removed by an owner. Type the store code to set it up again.' : 'Your login was removed by an owner.'); return;
+      endSession(s0.kind === 'pin' ? 'This phone was removed by an owner or account manager. Type the store code to set it up again.' : 'Your login was removed by an owner or account manager.'); return;
     }
     const d = snap.data();
     if (!d.loginAt || (s0.kind === 'pin' && d.staffId !== s0.staffId)) { endSession('Signed out.'); return; }
     s0.loginAt = toMs(d.loginAt) || s0.loginAt;
     const r = s0.kind === 'pin' ? 'employee' : normRole(d.role);
     if (r !== role) { role = r; s0.role = r; setBadge(); render(); }
+    /* v4.10: an owner / account manager renamed this login */
+    if (s0.kind === 'password' && d.name && cleanName(d.name) !== staff) { staff = cleanName(d.name); s0.name = staff; try { localStorage.setItem(STAFF_KEY, staff); } catch (e) {} renderStaff(); render(); }
   }, err => console.warn('member doc', err)));
   if (s0 && s0.kind === 'pin') unsubs.push(onSnapshot(F.doc(DB, 'staff', s0.staffId), snap => {
     if (snap.metadata.fromCache || session !== s0) return;
@@ -1192,7 +1278,7 @@ async function stillSignedIn() {
   const m = await readDoc(s.db, 'members', s.uid);
   if (!m || !freshMs(toMs(m.loginAt))) return false;
   if (s.kind === 'pin') { const st = await readDoc(s.db, 'staff', s.staffId); return !!st && st.status === 'approved' && m.staffId === s.staffId; }
-  return m.role === 'manager' || m.role === 'owner';
+  return isPwdRole(m.role);
 }
 
 /* Seed the 22 starter items exactly once per database. Deterministic ids (seed-01..seed-22) mean two
@@ -1304,12 +1390,30 @@ const fsApi = {
     if (counted) { u.countedAt = serverTimestamp(); u.countedBy = staff || ''; }
     return updateDoc(doc(DB, 'items', id), u);
   },
+  /* PRICEHIST v4.10: newest n entries only (automatic single-field index on date; same-date ties sorted on the phone). */
+  async loadRecentPrices(itemId, n) {
+    const { getDocs, collection, query, orderBy, limit } = F;
+    phStats.queries++;
+    const snap = await getDocs(query(collection(DB, 'items', itemId, 'prices'), orderBy('date', 'desc'), limit(n)));
+    phStats.docs += snap.size;
+    return snap.docs.map(d => { const x = d.data({ serverTimestamps: 'estimate' }); return { id: d.id, date: x.date, price: x.price, invoice: x.invoice || '', source: x.source || '', by: x.by || '', at: toMs(x.at), basis: x.basis || 'unit', net: x.net ?? null, note: x.note || '', verified: x.verified === true, verifiedBy: x.verifiedBy || '' }; });
+  },
   async loadPrices(itemId) {
     const { getDocs, collection } = F;
     const snap = await getDocs(collection(DB, 'items', itemId, 'prices'));
     return snap.docs.map(d => { const x = d.data({ serverTimestamps: 'estimate' }); return { id: d.id, date: x.date, price: x.price, invoice: x.invoice || '', source: x.source || '', by: x.by || '', at: toMs(x.at), basis: x.basis || 'unit', net: x.net ?? null, note: x.note || '', verified: x.verified === true, verifiedBy: x.verifiedBy || '' }; });
   },
-  /* Price entry + item summary (last/previous price) in one batch: 2 writes. */
+  /* v4.11: the summary goes to itemPrices/{itemId}; if the item doc still has old price fields / invoice lines, the same
+     batch copies the lines over and removes the old fields from the item doc (so it never shows two different prices). */
+  priceSummaryWrite(b, itemId, sum) {
+    const { doc, serverTimestamp, deleteField } = F;
+    const raw = rawItems.find(i => i.id === itemId), pr = itemPrices[itemId];
+    const data = Object.assign({}, sum, { updatedBy: staff || '', updatedAt: serverTimestamp() });
+    if (raw && raw.lines.length && !(pr && pr.lines && pr.lines.length)) data.lines = raw.lines;
+    b.set(doc(DB, 'itemPrices', itemId), data, { merge: true });
+    if (hasLegacyPrices(raw)) { const u = { lines: deleteField(), updatedAt: serverTimestamp() }; PRICE_KEYS.forEach(k => { u[k] = deleteField(); }); b.update(doc(DB, 'items', itemId), u); }
+  },
+  /* Price entry + price summary in one batch. */
   async addPrice(itemId, e) {
     const { writeBatch, doc, collection, serverTimestamp } = F;
     const list = await fsApi.loadPrices(itemId);
@@ -1319,7 +1423,7 @@ const fsApi = {
     const sum = priceSummary(list.concat([Object.assign({ id: ref.id, at: Date.now() }, entry)]));
     const b = writeBatch(DB);
     b.set(ref, Object.assign({}, entry, { at: serverTimestamp() }));
-    b.update(doc(DB, 'items', itemId), Object.assign(sum, { updatedAt: serverTimestamp() }));
+    fsApi.priceSummaryWrite(b, itemId, sum);
     return b.commit();
   },
   async confirmPrice(itemId, priceId) {
@@ -1327,7 +1431,7 @@ const fsApi = {
     const list = (await fsApi.loadPrices(itemId)).map(x => x.id === priceId ? Object.assign({}, x, { verified: true }) : x);
     const b = writeBatch(DB);
     b.update(doc(DB, 'items', itemId, 'prices', priceId), { verified: true, verifiedBy: staff || '', verifiedAt: serverTimestamp() });
-    b.update(doc(DB, 'items', itemId), Object.assign(priceSummary(list), { updatedAt: serverTimestamp() }));
+    fsApi.priceSummaryWrite(b, itemId, priceSummary(list));
     return b.commit();
   },
   async deletePrice(itemId, priceId) {
@@ -1335,7 +1439,7 @@ const fsApi = {
     const list = (await fsApi.loadPrices(itemId)).filter(x => x.id !== priceId);
     const b = writeBatch(DB);
     b.delete(doc(DB, 'items', itemId, 'prices', priceId));
-    b.update(doc(DB, 'items', itemId), Object.assign(priceSummary(list), { updatedAt: serverTimestamp() }));
+    fsApi.priceSummaryWrite(b, itemId, priceSummary(list));
     return b.commit();
   },
   /* ---- count sessions (countSessions/{vendorId}); every transition is re-checked by the rules ---- */
@@ -1449,6 +1553,7 @@ const localApi = {
   async deleteTask(id) { state.tasks = state.tasks.filter(x => x.id !== id); localSave(); render(); },
   async setItemFields(id, f, counted) { const it = state.items.find(i => i.id === id); if (!it) return; Object.assign(it, f); if (counted) { it.countedAt = Date.now(); it.countedBy = staff || ''; } localSave(); render(); },
   async loadPrices(itemId) { const it = state.items.find(i => i.id === itemId); return it && it.prices ? it.prices.slice() : []; },
+  async loadRecentPrices(itemId, n) { const it = state.items.find(i => i.id === itemId); return sortPrices(it && it.prices ? it.prices : []).slice(0, n); },
   async addPrice(itemId, e) { const it = state.items.find(i => i.id === itemId); if (!it) return; it.prices = (it.prices || []).concat([Object.assign({ id: uid(), by: staff || '', at: Date.now(), verified: true, verifiedBy: staff || '' }, e)]); Object.assign(it, priceSummary(it.prices)); localSave(); render(); },
   async confirmPrice(itemId, pid) { const it = state.items.find(i => i.id === itemId); if (!it) return; (it.prices || []).forEach(x => { if (x.id === pid) { x.verified = true; x.verifiedBy = staff || ''; } }); Object.assign(it, priceSummary(it.prices)); localSave(); render(); },
   async deletePrice(itemId, pid) { const it = state.items.find(i => i.id === itemId); if (!it) return; it.prices = (it.prices || []).filter(x => x.id !== pid); Object.assign(it, priceSummary(it.prices)); localSave(); render(); },
@@ -1578,10 +1683,11 @@ function renderInventory() {
     const low = isLow(i), r = openReqFor(i.id);
     return '<div class="card' + (low ? ' low' : '') + '" data-id="' + esc(i.id) + '"><div class="item-top"><div><div class="item-name">' + esc(i.name) + (low ? '<span class="pill low">LOW</span>' : '') + (r ? '<span class="pill req">Requested</span>' : '') + '</div>' +
       '<div class="meta">' + (hasNum(i.threshold) ? 'Low at ' + esc(i.threshold) : 'Low-stock level not set') + ' · ' + esc(i.supplier) + (i.pack ? ' · ' + esc(i.pack) : '') + (i.barcode ? ' · #' + esc(i.barcode) : '') + '</div>' +
-      ((i.usualOrder != null || i.lastBought) ? '<div class="meta helper">' + (i.usualOrder != null ? 'Usual order: ' + esc(i.usualOrder) : '') + (i.usualOrder != null && i.lastBought ? ' · ' : '') + (i.lastBought ? 'Last bought ' + esc(fmtDate(i.lastBought)) : '') + '</div>' : '') + '</div>' +
+      ((i.usualOrder != null || i.lastBought) ? '<div class="meta helper">' + (i.usualOrder != null ? 'Usual order: ' + esc(i.usualOrder) : '') + (i.usualOrder != null && i.lastBought ? ' · ' : '') + (i.lastBought ? 'Last bought ' + esc(fmtDate(i.lastBought)) : '') + '</div>' : '') + (canSeePrices() ? '<div class="pline">' + priceLine(i) + '</div>' : '') + '</div>' +
       (hasNum(i.qty) ? '<div class="qty">' + esc(i.qty) + '<br><small>' + esc(unitName(i.unit)) + '</small></div>' : '<div class="qty nc">Not counted<br><small>' + esc(unitName(i.unit)) + '</small></div>') + '</div>' +
-      '<div class="actions"><button class="btn small' + (r ? '' : ' primary') + '" data-act="req"' + (r ? ' disabled' : '') + '>' + (r ? 'Requested ✓' : 'Request') + '</button>' + (canEditItems() ? '<button class="btn small" data-act="edit">Edit</button><button class="btn small" data-act="del">Delete</button>' : '') + '</div></div>';
+      '<div class="actions"><button class="btn small' + (r ? '' : ' primary') + '" data-act="req"' + (r ? ' disabled' : '') + '>' + (r ? 'Requested ✓' : 'Request') + '</button>' + (canSeePrices() ? '<button class="btn small" data-act="hist" aria-label="Price history for ' + esc(i.name) + '">History</button>' : '') + (canEditItems() ? '<button class="btn small" data-act="edit">Edit</button><button class="btn small" data-act="del">Delete</button>' : '') + '</div></div>';
   }).join('');
+  phScan(el);
 }
 $('invList').addEventListener('click', e => {
   const btn = e.target.closest('button[data-act]'); if (!btn) return;
@@ -1589,6 +1695,7 @@ $('invList').addEventListener('click', e => {
   const it = state.items.find(i => i.id === id); if (!it) return;
   const a = btn.getAttribute('data-act');
   if (a === 'req') requestItem(it);
+  else if (a === 'hist' && canSeePrices()) openHistory(id);
   else if (a === 'edit' && canEditItems()) openItem(it, false);
   else if (a === 'del' && canEditItems()) confirmDel('Delete this item?', () => run(api().deleteItem(id)));
 });
@@ -1668,7 +1775,7 @@ function normVendor(id, x) {
     parEdit: x.parEdit === true, sortMode: x.sortMode === 'guide' ? 'guide' : 'alpha',
     group: GROUP_IDS.indexOf(x.group) >= 0 ? x.group : (DEFAULT_GROUP[id] || ''), orderContact: normContact(x.orderContact) };
 }
-/* v4.2 Vendors tab groups (type of service), in Sam's order. Vendor docs carry group (+ groupSort = list position);
+/* v4.2 Vendors tab groups (type of service), in a manager's order. Vendor docs carry group (+ groupSort = list position);
    DEFAULT_GROUP only covers vendor docs written before groups existed. */
 const GROUPS = [['meat', 'Meat'], ['cheese-oil-canned', 'Cheese, oil and canned goods'], ['produce-frozen-dry', 'Produce, frozen and dry goods'],
   ['paper-packaging', 'Paper and packaging'], ['beverages-dairy', 'Beverages and dairy'], ['prepared-bakery', 'Prepared food and bakery'], ['store-runs', 'Store runs']];
@@ -1711,7 +1818,7 @@ function priceSummary(list) {
 function pctChange(last, prev) { return (hasNum(last) && hasNum(prev) && Number(prev) > 0) ? (Number(last) - Number(prev)) / Number(prev) * 100 : null; }
 function money(v) { return hasNum(v) ? '$' + Number(v).toFixed(2) : ''; }
 function basisLabel(basis, unit) { return basis === 'lb' ? 'lb' : (basis === 'dozen' ? 'dozen' : (unitName(unit) || 'unit')); }
-const SOURCE_LABEL = { 'invoice-photo': 'From invoice photo (Marty)', invoice: 'Invoice', manual: 'Manual', quote: 'Quote' };
+const SOURCE_LABEL = { 'invoice-photo': 'From invoice photo', invoice: 'Invoice', manual: 'Manual', quote: 'Quote' };
 function chgHtml(pc, prev, prevDate) {
   if (pc == null) return '';
   if (Math.abs(pc) < 0.05) return ' <span class="chg">no change vs ' + money(prev) + '</span>';
@@ -1981,10 +2088,66 @@ $('mgrInbox').addEventListener('click', e => {
   else if (a === 'adjok') decideAdj(vid, true); else if (a === 'adjno') decideAdj(vid, false);
 });
 
+/* ---------- PRICEHIST v4.10: price history on item rows ----------
+   A row shows the current price (from the item doc's summary fields: no extra read) and, in small muted type, the two
+   entries before it. Those come from ONE small query per item (newest 3 price entries), run only when the row scrolls
+   into view, only for items that have a price, at most PH_CONC at a time, and cached per item until its price summary
+   changes. The History pop-up reads the newest 10 (+1 to know whether older ones exist) when it is opened.
+   Nothing here writes; adding / confirming / deleting prices stays in the manager-only Prices form (unchanged). */
+const PH_ROW = 3, PH_MODAL = 10, PH_CONC = 4;
+const phCache = new Map();                  /* itemId -> { sig, list } or { sig, err } */
+const phQueue = [], phBusy = new Set(), phObs = new Map(); let phActive = 0;
+const phStats = { queries: 0, docs: 0 };    /* test hook: how many price queries / docs this phone read */
+function sortPrices(l) { return l.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || ((b.at || 0) - (a.at || 0))); }
+function phItem(id) { return state.items.find(i => i.id === id); }
+function phSig(it) { return [it.lastPrice, it.lastPriceDate, it.lastPriceInvoice, it.lastPriceBasis, it.lastPriceVerified, it.prevPrice, it.prevPriceDate].join('|'); }
+function phGet(it) {
+  if (mode === 'local') return { list: sortPrices(it.prices || []) };
+  const c = phCache.get(it.id); return c && c.sig === phSig(it) ? c : null;
+}
+function prevPricesHtml(it) {
+  if (!it || !hasNum(it.lastPrice)) return '';
+  const c = phGet(it);
+  if (!c) return '<span class="pprev loading" aria-hidden="true">…</span>';
+  if (c.err) return '';
+  const lb = it.lastPriceBasis || 'unit', prev = c.list.slice(1, 3);
+  if (!prev.length) return '';            /* only one price so far: nothing to show next to it */
+  return '<span class="pprev" title="Previous prices">prev ' + prev.map(p => money(p.price) + ((p.basis || 'unit') !== lb ? '/' + esc(basisLabel(p.basis, it.unit)) : '')).join(', ') + '</span>';
+}
+function phSlot(it) { return '<span class="pprevw" data-ph="' + esc(it.id) + '">' + prevPricesHtml(it) + '</span>'; }
+function phPaint(id) {
+  const it = phItem(id); if (!it) return;
+  document.querySelectorAll('[data-ph="' + CSS.escape(id) + '"]').forEach(el => { el.innerHTML = prevPricesHtml(it); });
+}
+function phPump() {
+  while (phActive < PH_CONC && phQueue.length) {
+    const id = phQueue.shift(), it = phItem(id);
+    if (!it || !hasNum(it.lastPrice) || phGet(it) || mode !== 'live') continue;
+    const sig = phSig(it); phActive++; phBusy.add(id);
+    api().loadRecentPrices(id, PH_ROW).then(list => { phCache.set(id, { sig, list: sortPrices(list) }); }, e => { phCache.set(id, { sig, err: errText(e) }); })
+      .finally(() => { phActive--; phBusy.delete(id); phPaint(id); phPump(); });
+  }
+}
+function phWant(id) { if (phBusy.has(id) || phQueue.indexOf(id) >= 0) return; phQueue.push(id); phPump(); }
+/* after a list renders: watch its price slots; load a row's previous prices when it comes near the screen */
+function phScan(root) {
+  if (!root || mode !== 'live') return;
+  const key = root.id; if (phObs.has(key)) phObs.get(root.id).disconnect();
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); phWant(e.target.getAttribute('data-ph')); } }), { rootMargin: '400px 0px' }) : null;
+  if (io) phObs.set(key, io);
+  root.querySelectorAll('[data-ph]').forEach(el => { const it = phItem(el.getAttribute('data-ph')); if (!it || !hasNum(it.lastPrice) || phGet(it)) return; if (io) io.observe(el); else phWant(it.id); });
+}
+function phRefresh(id) { phCache.delete(id); if (document.querySelector('[data-ph="' + CSS.escape(id) + '"]')) phWant(id); }
+/* compact price + History link for order-summary lines (manager view only, like the estimates there) */
+function priceMini(it) {
+  if (!it) return '';
+  return '<span class="pmini">' + (hasNum(it.lastPrice) ? '<span class="price">' + money(it.lastPrice) + '/' + esc(basisLabel(it.lastPriceBasis, it.unit)) + '</span> ' + phSlot(it) : '<span class="meta">No price yet</span>') +
+    ' <button class="ulink" type="button" data-hist="' + esc(it.id) + '" aria-label="Price history for ' + esc(it.name) + '">History</button></span>';
+}
 function priceLine(it) {
   if (!hasNum(it.lastPrice)) return '<span class="meta">No price yet</span>';
   const pc = pctChange(it.lastPrice, it.prevPrice);
-  return '<span class="price">' + money(it.lastPrice) + '/' + esc(basisLabel(it.lastPriceBasis, it.unit)) + '</span>' + (it.lastPriceVerified ? '' : ' <span class="pill unv">unverified</span>') +
+  return '<span class="price">' + money(it.lastPrice) + '/' + esc(basisLabel(it.lastPriceBasis, it.unit)) + '</span> ' + phSlot(it) + (it.lastPriceVerified ? '' : ' <span class="pill unv">unverified</span>') +
     ' <span class="meta">' + esc(fmtDate(it.lastPriceDate)) + (it.lastPriceInvoice ? ' · inv ' + esc(it.lastPriceInvoice) : '') + (hasNum(it.lastPriceNet) ? ' · net ' + money(it.lastPriceNet) : '') + '</span>' + chgHtml(pc, it.prevPrice);
 }
 function numBox(f, v, ph, label, editable, lockTitle) {
@@ -2029,6 +2192,7 @@ function renderPar() {
     list.forEach(i => { const c = i.category || 'Other'; if (!groups[c]) { groups[c] = []; order.push(c); } groups[c].push(i); });
     $('parList').innerHTML = order.map(c => '<div class="section-title">' + esc(c) + ' (' + groups[c].length + ')</div>' + groups[c].map(row).join('')).join('');
   }
+  phScan($('parList'));
   /* actions under the sheet */
   let a = '';
   if (!all.length) { $('parActions').innerHTML = ''; return; }
@@ -2074,7 +2238,7 @@ function parRow(it, o) {
   return '<div class="card pitem' + (need ? ' need' : '') + (np ? ' np' : '') + (ovr ? ' ovrd' : '') + '" data-id="' + esc(it.id) + '"><div class="item-top"><div><div class="item-name">' + esc(it.name) + (need ? '<span class="pill need">Order ' + esc(fin) + '</span>' : '') + '</div>' +
     '<div class="meta">' + (it.itemNo ? '<span class="code">#' + esc(it.itemNo) + '</span> · ' : '') + [it.pack, (o.mgr && (needsUnit(it) || unitOtherOpen[it.id])) ? '' : unitName(it.unit)].filter(Boolean).map(esc).join(' · ') + (o.mgr && !needsUnit(it) && !unitOtherOpen[it.id] ? ' <button class="ulink" type="button" data-act="uedit" aria-label="Edit item (change unit)">edit</button>' : '') + (o.guide && it.sortIndex != null ? ' · guide ' + esc(it.sortIndex) : '') + '</div>' +
     (o.mgr && (needsUnit(it) || unitOtherOpen[it.id]) ? unitPicker(it) : '') +
-    '<div class="pline">' + priceLine(it) + '</div></div><button class="btn small" data-act="prices">Prices</button></div>' +
+    (canSeePrices() ? '<div class="pline">' + priceLine(it) + '</div></div><button class="btn small" data-act="hist" aria-label="Price history for ' + esc(it.name) + '">History</button></div>' : '</div></div>') +
     '<div class="pgrid' + (o.mgr && o.guide ? ' g4' : '') + '">' + numBox('qty', it.qty, '—', 'On hand', o.editQty, o.editQty ? '' : 'Counts locked') +
     numBox('par', it.par, 'no par', 'Par', o.editPar, o.editPar ? '' : 'Only a manager can change par') +
     numBox('orderQty', it.orderQty, np ? (sug == null ? 'by hand' : String(sug)) : (sug == null ? '—' : String(sug)), ovr ? 'Order ✎' : 'Order', o.editOrder, o.editOrder ? '' : (o.mgr ? 'Order is complete – locked until reset' : 'Order amounts are set by a manager')) +
@@ -2107,7 +2271,7 @@ $('parList').addEventListener('change', e => {
 $('parList').addEventListener('focusout', () => setTimeout(() => { if (parDirty && !editingPar()) { parDirty = false; renderPar(); } }, 0));
 $('parList').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input[data-f], input[data-uo]')) { e.preventDefault(); e.target.blur(); } });
 $('parList').addEventListener('click', e => {
-  const b = e.target.closest('button[data-act="prices"]'); if (b) { openPrices(b.closest('.card').getAttribute('data-id')); return; }
+  const b = e.target.closest('button[data-act="hist"]'); if (b) { openHistory(b.closest('.card').getAttribute('data-id')); return; }
   const ua = e.target.closest('button[data-act="useauto"]');
   if (ua) { if (!isMgr() || !canWrite()) return; run(api().setItemFields(ua.closest('.card').getAttribute('data-id'), { orderQty: null }, false), 'Back to the auto amount'); return; }
   const ue = e.target.closest('button[data-act="uedit"]');
@@ -2158,7 +2322,7 @@ function draftText(v, lines, s) {
   const out = ["Ricobene's - order list for " + v.name + (v.account ? ' (acct ' + v.account + ')' : ''), 'Date ' + new Date(s && s.completedAt || Date.now()).toLocaleDateString() + (s && s.exists ? ' · round ' + s.round : ''), ''];
   lines.forEach(l => out.push('- ' + l.qty + ' ' + (l.unit || '') + '  ' + l.name + (l.pack ? ' (' + l.pack + ')' : '') + (l.itemNo ? '  #' + l.itemNo : '') + (l.noPar ? '  [no par, by hand]' : '')));
   if (!lines.length) out.push('(no items)');
-  out.push('', 'Nothing is ordered by this app. Sam or Henry places the order with the vendor.');
+  out.push('', 'Nothing is ordered by this app. A manager places the order with the vendor.');
   return out.join('\n');
 }
 function renderDraft() {
@@ -2173,11 +2337,12 @@ function renderDraft() {
   const qtyCell = l => editO ? '<span class="dq"><input class="oq" data-oq="' + esc(l.itemId) + '" type="number" inputmode="decimal" min="0" step="any" value="' + esc(l.qty) + '" aria-label="Final order amount for ' + esc(l.name) + '"> ' + esc(l.unit) + '</span>' : '<span class="dq">' + esc(l.qty) + ' ' + esc(l.unit) + '</span>';
   const tag = l => l.manual && l.auto === undefined ? ' <span class="pill kind">manual</span>' : l.manual ? (l.noPar && l.auto == null ? ' <span class="pill kind">no par · by hand</span>' : ' <span class="pill kind ovr" data-ovr="1">override · auto ' + esc(autoTxt(l.auto, l.noPar)) + '</span>') : (l.noPar ? ' <span class="pill kind">no par · by hand</span>' : '');
   const undo = l => editO && l.manual ? ' <button class="ulink" type="button" data-auto="' + esc(l.itemId) + '">' + (l.noPar && l.auto == null ? 'remove' : 'use auto') + '</button>' : '';
-  $('draftBody').innerHTML = lines.length ? '<div class="card">' + lines.map(l => '<div class="dline" data-id="' + esc(l.itemId) + '">' + qtyCell(l) + '<span class="dn">' + esc(l.name) + tag(l) + undo(l) + '<span class="meta"> ' + esc([l.pack, l.itemNo ? '#' + l.itemNo : ''].filter(Boolean).join(' · ')) + '</span></span>' + (mgr ? '<span class="dp">' + (l.est.amt != null ? (l.est.approx ? '≈ ' : '') + money(l.est.amt) : '<span class="meta">' + esc(l.est.why) + '</span>') + '</span>' : '') + '</div>').join('') +
+  $('draftBody').innerHTML = lines.length ? '<div class="card">' + lines.map(l => '<div class="dline" data-id="' + esc(l.itemId) + '">' + qtyCell(l) + '<span class="dn">' + esc(l.name) + tag(l) + undo(l) + '<span class="meta"> ' + esc([l.pack, l.itemNo ? '#' + l.itemNo : ''].filter(Boolean).join(' · ')) + '</span>' + (mgr ? priceMini(phItem(l.itemId)) : '') + '</span>' + (mgr ? '<span class="dp">' + (l.est.amt != null ? (l.est.approx ? '≈ ' : '') + money(l.est.amt) : '<span class="meta">' + esc(l.est.why) + '</span>') + '</span>' : '') + '</div>').join('') +
     '<div class="dtotal">' + lines.length + ' line' + (lines.length > 1 ? 's' : '') + (mgr && priced.length ? ' · est. ' + (anyApprox ? '≈ ' : '') + money(est) + ' (from unverified invoice-photo prices unless confirmed)' : '') + '</div></div>'
     : '<div class="empty">Nothing to order yet. On the count sheet, enter on-hand counts; items with a par fill in automatically.</div>';
   const zo = frozen(s) ? [] : zeroedOverrides(v.id);
   if (zo.length) $('draftBody').innerHTML += '<div class="section-title">Set to 0 by a manager (' + zo.length + ')</div><div class="card" id="draftZero">' + zo.map(i => '<div class="dline" data-id="' + esc(i.id) + '"><span class="dq">0</span><span class="dn">' + esc(i.name) + ' <span class="pill kind ovr" data-ovr="1">override · auto ' + esc(suggestedQty(i)) + '</span>' + (editO ? ' <button class="ulink" type="button" data-auto="' + esc(i.id) + '">use auto</button>' : '') + '</span></div>').join('') + '</div>';
+  phScan($('draftBody'));
   const np = noParNoAmount(v.id);
   $('draftNoPar').innerHTML = !frozen(s) && np.length ? '<div class="section-title">No par – order by hand (' + np.length + ')</div><p class="note">These items have no par, so no amount is filled in automatically.' + (mgr ? ' Add a par on the count sheet to have it filled in automatically, or type an amount in its Order box to order it by hand.' : ' A manager adds a par or an amount by hand.') + '</p><div class="card">' + np.map(i => '<div class="dline"><span class="dq">—</span><span class="dn">' + esc(i.name) + '<span class="meta"> ' + esc([i.pack, i.itemNo ? '#' + i.itemNo : ''].filter(Boolean).join(' · ')) + ' · on hand ' + (hasNum(i.qty) ? esc(i.qty) : 'not counted') + '</span></span></div>').join('') + '</div>' : '';
   $('draftText').textContent = draftText(v, lines, s);
@@ -2211,6 +2376,7 @@ $('draftBody').addEventListener('change', e => {
 $('draftBody').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input[data-oq]')) { e.preventDefault(); e.target.blur(); } });
 $('draftBody').addEventListener('focusout', () => setTimeout(() => { if (parDirty && !editingPar()) { parDirty = false; renderVendors(); } }, 0));
 $('draftBody').addEventListener('click', e => {
+  const h = e.target.closest('button[data-hist]'); if (h) { openHistory(h.getAttribute('data-hist')); return; }
   const b = e.target.closest('button[data-auto]'); if (!b || !isMgr() || !canWrite()) return;
   run(api().setItemFields(b.getAttribute('data-auto'), { orderQty: null }, false), 'Back to the auto amount');
 });
@@ -2469,7 +2635,42 @@ $('priceList').addEventListener('click', e => {
   const pid = b.closest('.prow').getAttribute('data-pid'), id = priceItemId;
   confirmDel('Delete this price entry?', () => run(api().deletePrice(id, pid).then(() => refreshPrices())));
 });
-$('priceClose').onclick = () => { $('priceModal').classList.add('hidden'); priceItemId = null; };
+$('priceClose').onclick = () => { if (priceItemId) phRefresh(priceItemId); $('priceModal').classList.add('hidden'); priceItemId = null; };
+
+/* PRICEHIST v4.10: read-only History pop-up: newest 10 entries with date, invoice #, source; vendor from the item. */
+let histId = null, histSeq = 0;
+async function openHistory(id) {
+  if (!canSeePrices()) return;   /* v4.10: employees never see prices (the rules refuse price entries too) */
+  const it = phItem(id); if (!it) return;
+  histId = id; const seq = ++histSeq, v = vendorById(itemVendorId(it));
+  $('histTitle').textContent = it.name;
+  $('histSub').textContent = [v ? v.name : it.supplier, it.pack, it.itemNo ? '#' + it.itemNo : ''].filter(Boolean).join(' · ');
+  $('histNow').innerHTML = hasNum(it.lastPrice) ? '<div class="pbig">' + money(it.lastPrice) + '<small>/' + esc(basisLabel(it.lastPriceBasis, it.unit)) + '</small>' + (it.lastPriceVerified ? ' <span class="pill ok">confirmed</span>' : ' <span class="pill unv">unverified</span>') + '</div><div class="meta">Current price · ' + esc(fmtDate(it.lastPriceDate)) + (it.lastPriceInvoice ? ' · inv ' + esc(it.lastPriceInvoice) : '') + '</div>' : '<div class="meta">No price yet.</div>';
+  $('histManage').classList.toggle('hidden', !isMgr());
+  $('histList').innerHTML = '<div class="meta hload">Loading…</div>'; $('histMore').textContent = '';
+  $('histModal').classList.remove('hidden');
+  let list;
+  try { list = sortPrices(await api().loadRecentPrices(id, PH_MODAL + 1)); }
+  catch (e) { if (seq === histSeq) $('histList').innerHTML = '<div class="empty">Could not load the price history (' + esc(errText(e)) + ').</div>'; return; }
+  if (seq !== histSeq) return;
+  const more = list.length > PH_MODAL; list = list.slice(0, PH_MODAL);
+  const cur = phItem(id) || it;
+  if (mode === 'live' && list.length && list[0].price === cur.lastPrice && list[0].date === cur.lastPriceDate) { phCache.set(id, { sig: phSig(cur), list: list.slice(0, PH_ROW) }); phPaint(id); }
+  $('histList').innerHTML = list.length ? list.map((p, k) => {
+    const prev = list.slice(k + 1).find(x => (x.basis || 'unit') === (p.basis || 'unit')), c = prev ? pctChange(p.price, prev.price) : null;
+    const chg = c == null ? '' : (Math.abs(c) < 0.05 ? '<span class="chg">same</span>' : '<span class="chg ' + (c > 0 ? 'up' : 'down') + '">' + (c > 0 ? '▲ +' : '▼ ') + c.toFixed(1) + '%</span>');
+    return '<div class="hrow' + (k === 0 ? ' cur' : '') + '"><div class="hl"><div class="hd">' + esc(fmtDate(p.date) || 'no date') + (k === 0 ? ' <span class="pill kind">current</span>' : '') + '</div>' +
+      '<div class="meta">' + [p.invoice ? 'Inv ' + esc(p.invoice) : 'No invoice #', esc(SOURCE_LABEL[p.source] || p.source || '')].filter(Boolean).join(' · ') + (p.note ? '<br>' + esc(p.note) : '') + '</div></div>' +
+      '<div class="hr"><div class="hp">' + money(p.price) + '<small>/' + esc(basisLabel(p.basis, cur.unit)) + '</small></div>' + (hasNum(p.net) ? '<div class="meta">net ' + money(p.net) + '</div>' : '') +
+      '<div>' + chg + (p.verified ? ' <span class="pill ok">confirmed</span>' : ' <span class="pill unv">unverified</span>') + '</div></div></div>';
+  }).join('') : '<div class="empty">No price entries yet. Prices are only added from real invoices' + (isMgr() ? ' (Add / confirm prices below).' : ', by a manager.') + '</div>';
+  $('histMore').textContent = more ? 'Showing the ' + PH_MODAL + ' most recent entries. Older entries are kept.' : (list.length === 1 ? 'Only one price so far: nothing earlier to compare.' : (list.length ? list.length + ' entries (all of them).' : ''));
+}
+function closeHistory() { histSeq++; histId = null; $('histModal').classList.add('hidden'); }
+$('histX').onclick = closeHistory; $('histClose').onclick = closeHistory;
+$('histModal').addEventListener('click', e => { if (e.target === $('histModal')) closeHistory(); });   /* tap outside the sheet */
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('histModal').classList.contains('hidden')) closeHistory(); });
+$('histManage').onclick = () => { const id = histId; closeHistory(); if (id && isMgr()) openPrices(id); };
 parseHash();
 if (rview.vid) current = 'receive';
 
@@ -2480,7 +2681,7 @@ startFirestore().catch(e => {
   const code = String(e && e.code || '');
   fallback(code.includes('auth/') ? 'could not sign in to the shared database (' + code + ')' : (e && e.message) || 'could not connect');
 });
-window.__storeHub = { openService: id => openService(id), setSeg: s => { vSeg = s; renderVendors(); }, finalQty: it => finalQty(it), suggested: it => suggestedQty(it), buildPdf: d => buildPdf(d), pdfData: vid => pdfData(vendorById(vid)), get state() { return state; }, get mode() { return mode; }, get role() { return role; }, get name() { return staff; }, get online() { return liveOnline; }, get uid() { return UID; }, get gate() { return mode === 'gate' ? gatePanel : ''; }, get session() { return session ? session.kind : ''; }, get people() { return people; }, get devUid() { return DEV && DEV.uid; }, idleNow: () => { lastAct = 0; sessionCheck(); }, checkNow: () => sessionCheck() };
+window.__storeHub = { get priceDocs() { return Object.keys(itemPrices).length; }, get pricesErr() { return pricesErr; }, rawItem: id => rawItems.find(i => i.id === id) || null, get phStats() { return phStats; }, phCached: id => !!phCache.get(id), openHistory: id => openHistory(id), openService: id => openService(id), setSeg: s => { vSeg = s; renderVendors(); }, finalQty: it => finalQty(it), suggested: it => suggestedQty(it), buildPdf: d => buildPdf(d), pdfData: vid => pdfData(vendorById(vid)), get state() { return state; }, get mode() { return mode; }, get role() { return role; }, get name() { return staff; }, get online() { return liveOnline; }, get uid() { return UID; }, get gate() { return mode === 'gate' ? gatePanel : ''; }, get session() { return session ? session.kind : ''; }, get people() { return people; }, get devUid() { return DEV && DEV.uid; }, idleNow: () => { lastAct = 0; sessionCheck(); }, checkNow: () => sessionCheck() };
 </script>
 </body>
 </html>
